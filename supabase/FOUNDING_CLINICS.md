@@ -1,0 +1,57 @@
+# Founding clinic pricing
+
+## How it works
+
+- **Charter partner (1 clinic, manual):** Your first design partner can get a **locked $49/mo** rate — set in Supabase; checkout uses `VITE_STRIPE_LINK_CHARTER`.
+- **Founding clinics (5 slots):** Clinics **apply on the Billing page** — you approve in-app (admin panel) before they get **locked $79/mo**.
+- New workspaces start on **standard** plan ($119/mo). Founding is no longer auto-assigned at signup.
+- Founding clinics **keep** `locked_monthly_price_cents` while subscribed.
+
+## Approve founding applications
+
+1. Sign in as platform admin (`addstero28@gmail.com` — change in migration `010` if needed).
+2. Open **Billing** — **Founding applications (admin)** panel lists pending requests.
+3. **Approve** unlocks founding rate for that workspace; they subscribe via the founding Stripe link.
+
+## One-time setup
+
+1. Open **Supabase → SQL Editor**.
+2. Paste and run the full file: `supabase/migrations/003_founding_clinics.sql`
+3. In **Stripe**, create three recurring products (Payment Links):
+   - **Charter partner** — $49/month → `VITE_STRIPE_LINK_CHARTER` (first design partner only)
+   - **Founding clinic** — $79/month → `VITE_STRIPE_LINK_FOUNDING`
+   - **Standard clinic** — $119/month → `VITE_STRIPE_LINK_STANDARD`
+4. Add those URLs to `.env.local`, Vercel env vars, and redeploy.
+
+## Charter partner (first customer)
+
+After they create their workspace, run in **Supabase → SQL Editor** (replace the workspace name):
+
+```sql
+update public.organizations
+set
+  plan = 'charter',
+  is_founding = true,
+  locked_monthly_price_cents = 4900,
+  founding_enrolled_at = coalesce(founding_enrolled_at, now())
+where name = 'Their Clinic Name Here';
+```
+
+Billing will show **$49/mo** and the charter Payment Link button.
+
+## Your existing clinic
+
+The migration **automatically marks up to 5 oldest organizations** as founding. Check in Supabase **Table Editor → organizations**:
+
+- `is_founding` = true
+- `locked_monthly_price_cents` = 7900
+- `plan` = founding
+
+## Change prices later
+
+Edit constants in:
+
+- SQL: `003_founding_clinics.sql` (for new orgs only — re-run function replace, not full migration)
+- App: `src/lib/stripe.ts` — `FOUNDING_PRICE_CENTS`, `STANDARD_PRICE_CENTS`
+
+Existing founding rows keep their locked cents in the database.
