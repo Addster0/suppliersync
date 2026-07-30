@@ -1,6 +1,11 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { openFileUrl, resolveStorageUrl } from "../api/vendors";
-import { formatFileSize, hasDownloadableFile, normalizeStorageFileUrl } from "../lib/utils";
+import {
+  formatFileSize,
+  hasDownloadableFile,
+  isDirectPreviewUrl,
+  normalizeStorageFileUrl,
+} from "../lib/utils";
 
 type FileAttachmentLinkProps = {
   fileUrl: string;
@@ -33,9 +38,8 @@ export function FileAttachmentLink({
       return;
     }
 
-    const normalized = normalizeStorageFileUrl(fileUrl);
-    if (normalized.startsWith("http") || normalized.startsWith("data:")) {
-      setHref(normalized);
+    if (isDirectPreviewUrl(fileUrl)) {
+      setHref(normalizeStorageFileUrl(fileUrl));
       setLoading(false);
       return;
     }

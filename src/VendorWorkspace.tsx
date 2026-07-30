@@ -17,6 +17,7 @@ import {
   uploadOrgFile,
 } from "./api/vendors";
 import { BrandLogo } from "./components/BrandLogo";
+import { DocumentViewerModal } from "./components/DocumentViewerModal";
 import { EvaluationsSection } from "./components/EvaluationsSection";
 import { FileAttachmentLink } from "./components/FileAttachmentLink";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -45,10 +46,18 @@ import {
   formatFileSize,
   getStatusClass,
   hasDownloadableFile,
+  localFileToAttachment,
   money,
   prettyDate,
+  revokeAttachmentUrl,
 } from "./lib/utils";
-import type { Contract, DocumentDocType, FileAttachment, LedgerEntry, Status, Vendor } from "./types";
+import {
+  CONTRACT_END_HINT,
+  CONTRACT_END_LABEL,
+  CONTRACT_START_HINT,
+  CONTRACT_START_LABEL,
+} from "./lib/renewals";
+import type { Contract, DocumentDocType, DocumentItem, FileAttachment, LedgerEntry, Status, Vendor } from "./types";
 
 const tabs = ["contacts", "contracts", "spend", "documents", "evaluations"] as const;
 type Tab = (typeof tabs)[number];
@@ -607,6 +616,29 @@ function ContractsSection({
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [contractFile, setContractFile] = useState<File | null>(null);
+  const [viewingFile, setViewingFile] = useState<FileAttachment | null>(null);
+
+  useEffect(() => {
+    return () => revokeAttachmentUrl(viewingFile);
+  }, [viewingFile]);
+
+  function closeFileViewer() {
+    setViewingFile((current) => {
+      revokeAttachmentUrl(current);
+      return null;
+    });
+  }
+
+  function previewAttachment(attachment: FileAttachment) {
+    setViewingFile((current) => {
+      revokeAttachmentUrl(current);
+      return attachment;
+    });
+  }
+
+  function previewLocalFile(file: File) {
+    previewAttachment(localFileToAttachment(file));
+  }
 
   async function handleAddContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -652,8 +684,16 @@ function ContractsSection({
           </div>
           <FormGrid onSubmit={handleAddContract} submitText={saving ? "Saving…" : "Add Contract"} disabled={saving}>
             <input name="name" placeholder="Contract name" />
-            <input name="startDate" type="date" />
-            <input name="endDate" type="date" />
+            <label className="field-block">
+              <span className="label">{CONTRACT_START_LABEL}</span>
+              <input name="startDate" required type="date" />
+              <span className="muted small">{CONTRACT_START_HINT}</span>
+            </label>
+            <label className="field-block">
+              <span className="label">{CONTRACT_END_LABEL}</span>
+              <input name="endDate" required type="date" />
+              <span className="muted small">{CONTRACT_END_HINT}</span>
+            </label>
             <input name="value" placeholder="Value" type="number" />
             <select name="status" defaultValue="pending">
               <option value="active">Active</option>
@@ -669,7 +709,22 @@ function ContractsSection({
             />
             {contractFile && (
               <p className="selected-file">
-                Attached: <strong>{contractFile.name}</strong> ({formatFileSize(contractFile.size)})
+                <span>Attached:</span>
+                <button
+                  type="button"
+                  className="doc-title-button"
+                  onClick={() => previewLocalFile(contractFile)}
+                >
+                  {contractFile.name}
+                </button>
+                <span className="muted small">({formatFileSize(contractFile.size)})</span>
+                <button
+                  type="button"
+                  className="secondary doc-view-button"
+                  onClick={() => previewLocalFile(contractFile)}
+                >
+                  View
+                </button>
                 <button type="button" className="text-button" onClick={() => setContractFile(null)}>
                   Remove
                 </button>
@@ -684,8 +739,10 @@ function ContractsSection({
         <div className="card row" key={contract.id}>
           <div>
             <strong>{contract.name}</strong>
-            <p className="muted">
-              {prettyDate(contract.startDate)} to {prettyDate(contract.endDate)}
+            <p className="muted small">
+              {CONTRACT_START_LABEL}: {prettyDate(contract.startDate)}
+              <br />
+              {CONTRACT_END_LABEL}: {prettyDate(contract.endDate)}
             </p>
             <p>{money(contract.value)}</p>
             {contract.file && (
@@ -694,7 +751,18 @@ function ContractsSection({
                   fileUrl={contract.file.fileUrl}
                   fileName={contract.file.fileName}
                   fileSize={contract.file.fileSize}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    previewAttachment(contract.file!);
+                  }}
                 />
+                <button
+                  type="button"
+                  className="secondary doc-view-button"
+                  onClick={() => previewAttachment(contract.file!)}
+                >
+                  View
+                </button>
               </div>
             )}
           </div>
@@ -711,6 +779,15 @@ function ContractsSection({
           </div>
         </div>
       ))}
+      {viewingFile && (
+        <DocumentViewerModal
+          fileUrl={viewingFile.fileUrl}
+          fileName={viewingFile.fileName}
+          fileSize={viewingFile.fileSize}
+          mimeType={viewingFile.mimeType}
+          onClose={closeFileViewer}
+        />
+      )}
     </Section>
   );
 }
@@ -812,6 +889,7 @@ function DocumentsSection({
   const [uploading, setUploading] = useState(false);
   const [docType, setDocType] = useState<DocumentDocType>("general");
   const [expiresAt, setExpiresAt] = useState("");
+  const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null);
 
   async function uploadFiles(files: File[]) {
     if (!files.length || readOnly) return;
@@ -884,12 +962,13 @@ function DocumentsSection({
         <div className="card row" key={document.id}>
           <div>
             {hasDownloadableFile(document.fileUrl) ? (
-              <FileAttachmentLink
-                fileUrl={document.fileUrl}
-                fileName={document.fileName}
-                fileSize={document.fileSize}
-                variant="title"
-              />
+              <button
+                type="button"
+                className="doc-title-button"
+                onClick={() => setViewingDocument(document)}
+              >
+                📄 {document.fileName}
+              </button>
             ) : (
               <strong>📄 {document.fileName}</strong>
             )}
@@ -900,6 +979,15 @@ function DocumentsSection({
             </p>
           </div>
           <div className="right-actions">
+            {hasDownloadableFile(document.fileUrl) && (
+              <button
+                type="button"
+                className="secondary doc-view-button"
+                onClick={() => setViewingDocument(document)}
+              >
+                View
+              </button>
+            )}
             {!hasDownloadableFile(document.fileUrl) && <span className="muted small">No file attached</span>}
             {!readOnly && (
               <DeleteButton
@@ -912,6 +1000,14 @@ function DocumentsSection({
           </div>
         </div>
       ))}
+      {viewingDocument && (
+        <DocumentViewerModal
+          fileUrl={viewingDocument.fileUrl}
+          fileName={viewingDocument.fileName}
+          fileSize={viewingDocument.fileSize}
+          onClose={() => setViewingDocument(null)}
+        />
+      )}
     </Section>
   );
 }

@@ -1,4 +1,5 @@
 import { requireSupabase } from "../lib/supabase";
+import { formatStorageError, ORG_FILES_BUCKET } from "../lib/storage";
 import type {
   Contact,
   Contract,
@@ -386,41 +387,36 @@ export async function uploadOrgFile(
   const safeName = file.name.replace(/[^\w.-]+/g, "_");
   const path = `${organizationId}/${vendorId}/${Date.now()}-${safeName}`;
 
-  const { error } = await client.storage.from("organization-files").upload(path, file, {
+  const { error } = await client.storage.from(ORG_FILES_BUCKET).upload(path, file, {
     upsert: false,
     contentType: file.type || undefined,
   });
 
-  if (error) throw new Error(error.message);
-
-  const { data, error: signError } = await client.storage
-    .from("organization-files")
-    .createSignedUrl(path, 60 * 60 * 24 * 7);
-
-  if (signError || !data?.signedUrl) {
-    throw new Error(signError?.message ?? "Could not create download link.");
-  }
+  if (error) throw new Error(formatStorageError(error.message));
 
   return { fileUrl: `sb://${path}`, path };
 }
 
 export async function resolveStorageUrl(fileUrl: string): Promise<string> {
   const normalized = normalizeStorageFileUrl(fileUrl);
-  if (!normalized.startsWith("sb://")) return normalized;
+  if (!normalized.startsWith("sb://")) {
+    return normalized;
+  }
 
   const path = normalized.slice(5);
   const client = requireSupabase();
 
-  const { data, error } = await client.storage.from("organization-files").createSignedUrl(path, 60 * 60);
+  const { data, error } = await client.storage.from(ORG_FILES_BUCKET).createSignedUrl(path, 60 * 60);
 
   if (!error && data?.signedUrl) {
     return data.signedUrl;
   }
 
-  const { data: blob, error: downloadError } = await client.storage.from("organization-files").download(path);
+  const { data: blob, error: downloadError } = await client.storage.from(ORG_FILES_BUCKET).download(path);
 
   if (downloadError || !blob) {
-    throw new Error(downloadError?.message ?? error?.message ?? "Could not open file.");
+    const raw = downloadError?.message ?? error?.message ?? "Could not open file.";
+    throw new Error(formatStorageError(raw));
   }
 
   return URL.createObjectURL(blob);

@@ -623,6 +623,10 @@ button:disabled:hover {
 
 .file-meta {
   margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .file-attachment-wrap {
@@ -1535,6 +1539,83 @@ a.file-attachment-link:hover {
   text-decoration: underline;
 }
 
+.billing-trial-remaining {
+  margin: 4px 0 8px;
+  font-size: 0.95rem;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.trial-banner {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.trial-banner a {
+  font-weight: 600;
+}
+
+.storage-setup-banner {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  font-weight: 500;
+  padding: 14px 20px;
+}
+
+.storage-setup-banner__head strong {
+  display: block;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.storage-setup-banner__lead {
+  margin: 0;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.storage-setup-banner__steps {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.storage-setup-banner__steps ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.storage-setup-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storage-setup-banner__sql {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .attention-setup-banner {
   display: flex;
   justify-content: space-between;
@@ -1583,6 +1664,18 @@ a.file-attachment-link:hover {
 .founding-admin-card {
   margin-bottom: 18px;
   border: 2px solid #1d4ed8;
+}
+
+.platform-admin-links .marketing-button {
+  margin-top: 12px;
+}
+
+.platform-signups-list {
+  margin-top: 12px;
+}
+
+.platform-signup-item {
+  align-items: flex-start;
 }
 
 .founding-admin-list {
@@ -3004,6 +3097,131 @@ a.file-attachment-link:hover {
   border-top: 1px solid #e2e8f0;
 }
 
+.about-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(29, 78, 216, 0.12), transparent 55%),
+    linear-gradient(180deg, #eef2f7 0%, #f8fafc 100%);
+  padding: 20px 16px 32px;
+}
+
+.about-page-nav {
+  max-width: 560px;
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.about-page-main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+.about-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.about-avatar {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d4ed8, #0d9488);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.02em;
+}
+
+.about-page-main h1 {
+  margin: 4px 0 2px;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.about-tagline {
+  margin: 0;
+  font-size: 15px;
+}
+
+.about-section {
+  margin-bottom: 24px;
+}
+
+.about-section h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.about-section p {
+  color: #334155;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.about-section p + p {
+  margin-top: 10px;
+}
+
+.about-cta-block {
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.about-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.about-actions .marketing-button {
+  text-align: center;
+  justify-content: center;
+}
+
+.about-contact {
+  margin-top: 8px;
+}
+
+.about-contact a {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.about-contact a:hover {
+  text-decoration: underline;
+}
+
+@media (min-width: 480px) {
+  .about-page {
+    padding: 24px;
+  }
+
+  .about-page-main {
+    padding: 32px 28px;
+  }
+
+  .about-page-main h1 {
+    font-size: 32px;
+  }
+
+  .about-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 980px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
@@ -3069,5 +3287,474 @@ a.file-attachment-link:hover {
   }
   .mock-sidebar {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Founder outreach CRM
+   --------------------------------------------------------------------------- */
+
+.outreach-workspace-label {
+  color: #0f766e !important;
+}
+
+.outreach-nav-tab {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+
+.outreach-shell .content {
+  max-width: 1100px;
+}
+
+.outreach-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.outreach-overdue-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.outreach-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 8px;
+}
+
+.outreach-view-tabs button {
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.outreach-view-tabs button.active {
+  background: white;
+  color: #172033;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.outreach-goals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.outreach-goal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.outreach-goal-done {
+  color: #047857;
+}
+
+.outreach-goal-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.outreach-goal-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #2563eb;
+  transition: width 0.2s ease;
+}
+
+.outreach-goal-fill--done {
+  background: #059669;
+}
+
+.outreach-dashboard-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.outreach-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.outreach-lead-list {
+  display: grid;
+  gap: 8px;
+}
+
+.outreach-lead-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: inherit;
+  padding: 14px 16px;
+}
+
+.outreach-lead-row:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.outreach-lead-row--overdue {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.outreach-lead-row-meta {
+  margin: 6px 0 0;
+}
+
+.outreach-lead-row-aside {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  flex-shrink: 0;
+}
+
+.outreach-date {
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.outreach-date.overdue {
+  color: #b91c1c;
+}
+
+.outreach-fit {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.outreach-fit--high {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.outreach-fit--medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.outreach-fit--low {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.outreach-pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.outreach-pipeline-chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: inherit;
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
+.outreach-pipeline-chip strong {
+  font-size: 18px;
+  color: #1d4ed8;
+}
+
+.outreach-stage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.outreach-stage-tabs button {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.outreach-stage-tabs button.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
+
+.outreach-empty {
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.outreach-playbook-intro h3 {
+  margin: 8px 0;
+}
+
+.outreach-playbook-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.outreach-playbook-day h4 {
+  margin: 8px 0 12px;
+}
+
+.outreach-playbook-list {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.outreach-playbook-list li + li {
+  margin-top: 6px;
+}
+
+.outreach-stage-guide {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.outreach-stage-guide-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.doc-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.doc-viewer {
+  width: min(960px, 100%);
+  margin-top: 24px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.doc-viewer--preview {
+  height: calc(100vh - 48px);
+}
+
+.doc-viewer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.doc-viewer-head h3 {
+  margin: 0;
+  word-break: break-word;
+}
+
+.doc-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-viewer-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.doc-viewer-image {
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
+  margin: 0 auto;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  object-fit: contain;
+}
+
+.doc-viewer-fallback {
+  padding: 24px 0;
+}
+
+.doc-viewer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+a.doc-viewer-download {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+button.doc-view-button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+}
+
+button.doc-title-button {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.doc-title-button:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.outreach-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.outreach-modal {
+  width: min(640px, 100%);
+  margin-top: 40px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.outreach-modal--wide {
+  width: min(960px, 100%);
+}
+
+.outreach-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.outreach-modal-head h3 {
+  margin: 4px 0 0;
+}
+
+.outreach-form-wide {
+  grid-column: span 2;
+}
+
+.outreach-detail-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+}
+
+.outreach-activity-form {
+  margin-bottom: 20px;
+}
+
+.outreach-activity-history-label {
+  margin-top: 8px;
+}
+
+.outreach-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.outreach-activity-list li {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.outreach-activity-list p {
+  margin: 6px 0 0;
+}
+
+.outreach-delete-btn {
+  margin-top: 12px;
+  color: #b91c1c;
+}
+
+@media (max-width: 900px) {
+  .outreach-goals-grid,
+  .outreach-dashboard-columns,
+  .outreach-playbook-grid,
+  .outreach-detail-grid,
+  .outreach-pipeline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .outreach-form-wide {
+    grid-column: auto;
+  }
+
+  .outreach-stage-guide-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }

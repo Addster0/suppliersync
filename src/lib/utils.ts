@@ -52,13 +52,43 @@ export function normalizeStorageFileUrl(fileUrl: string) {
   return trimmed;
 }
 
-export function hasDownloadableFile(fileUrl: string) {
+export function isDirectPreviewUrl(fileUrl: string) {
   const normalized = normalizeStorageFileUrl(fileUrl);
   return (
+    normalized.startsWith("blob:") ||
     normalized.startsWith("data:") ||
-    normalized.startsWith("http") ||
-    normalized.startsWith("sb://")
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://")
   );
+}
+
+export function hasDownloadableFile(fileUrl: string) {
+  const normalized = normalizeStorageFileUrl(fileUrl);
+  return isDirectPreviewUrl(normalized) || normalized.startsWith("sb://");
+}
+
+export function localFileToAttachment(file: File): FileAttachment {
+  return {
+    fileName: file.name,
+    fileSize: file.size,
+    fileUrl: URL.createObjectURL(file),
+    mimeType: file.type || "application/octet-stream",
+  };
+}
+
+export function revokeAttachmentUrl(attachment: FileAttachment | null | undefined) {
+  if (attachment?.fileUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(attachment.fileUrl);
+  }
+}
+
+export type FilePreviewKind = "pdf" | "image" | "other";
+
+export function getFilePreviewKind(fileName: string, mimeType?: string): FilePreviewKind {
+  const lower = fileName.toLowerCase();
+  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(lower)) return "image";
+  return "other";
 }
 
 export function money(value: number) {
