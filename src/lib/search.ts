@@ -1,7 +1,14 @@
 import type { Vendor } from "../types";
 
+/** Must match search_organization max in 028_abuse_prevention.sql */
+export const MAX_SEARCH_QUERY_LENGTH = 100;
+
 export function normalizeSearchQuery(query: string) {
   return query.trim().toLowerCase();
+}
+
+export function clampSearchQuery(query: string) {
+  return query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
 }
 
 export function vendorMatchesQuery(vendor: Vendor, query: string) {

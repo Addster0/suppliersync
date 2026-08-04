@@ -98,8 +98,21 @@ Run on **https://suppliersync.org** after steps 1–2.
 
 ---
 
+## 4. Abuse prevention
+
+Migration `028_abuse_prevention.sql` adds org-creation caps, AI extract rate limits, and search query length limits. See [ABUSE_PREVENTION.md](./ABUSE_PREVENTION.md) for the full audit and deploy steps.
+
+```bash
+npx supabase db push --project-ref bvrwyuwwxsruihkxeftm
+npx supabase functions deploy extract-contract --project-ref bvrwyuwwxsruihkxeftm
+npx supabase functions deploy extract-document --project-ref bvrwyuwwxsruihkxeftm
+```
+
+---
+
 ## Related docs
 
+- [ABUSE_PREVENTION.md](./ABUSE_PREVENTION.md)
 - [RENEWAL_EMAIL_SETUP.md](./RENEWAL_EMAIL_SETUP.md)
 - [FOUNDING_CLINICS.md](./FOUNDING_CLINICS.md)
 - [STRIPE_SETUP.md](./STRIPE_SETUP.md)

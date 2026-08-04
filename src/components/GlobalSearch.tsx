@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { searchOrganization } from "../api/vendors";
-import { filterAndRankVendors, normalizeSearchQuery, vendorToSearchResult } from "../lib/search";
+import {
+  clampSearchQuery,
+  filterAndRankVendors,
+  MAX_SEARCH_QUERY_LENGTH,
+  normalizeSearchQuery,
+  vendorToSearchResult,
+} from "../lib/search";
 import type { SearchResult, Vendor } from "../types";
 
 export function GlobalSearch({
@@ -42,7 +48,7 @@ export function GlobalSearch({
   }, [query, onQueryChange]);
 
   useEffect(() => {
-    const trimmed = query.trim();
+    const trimmed = clampSearchQuery(query);
     if (trimmed.length < 2) {
       setRemoteResults([]);
       setError("");
@@ -92,6 +98,7 @@ export function GlobalSearch({
         type="search"
         placeholder="Vendor name (e.g. Northstar)…"
         value={query}
+        maxLength={MAX_SEARCH_QUERY_LENGTH}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
         aria-label="Search vendors and workspace records"

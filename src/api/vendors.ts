@@ -33,6 +33,10 @@ import {
 } from "../lib/utils";
 import { MAX_VENDOR_IMPORT_ROWS } from "../lib/vendorImport";
 import type { CsvVendorRow } from "../lib/csvImport";
+import {
+  removeOrgStorageFileFromUrl,
+  removeOrgStoragePrefix,
+} from "../lib/storageCleanup";
 
 type VendorRow = {
   id: string;
@@ -293,7 +297,18 @@ export async function updateVendorCore(
 }
 
 export async function deleteVendor(vendorId: string): Promise<void> {
-  const { error } = await requireSupabase().from("vendors").delete().eq("id", vendorId);
+  const client = requireSupabase();
+  const { data: vendor } = await client
+    .from("vendors")
+    .select("organization_id")
+    .eq("id", vendorId)
+    .maybeSingle();
+
+  if (vendor?.organization_id) {
+    await removeOrgStoragePrefix(`${vendor.organization_id}/${vendorId}`);
+  }
+
+  const { error } = await client.from("vendors").delete().eq("id", vendorId);
   if (error) throw new Error(error.message);
 }
 
@@ -426,7 +441,16 @@ export async function updateContract(
 }
 
 export async function deleteContract(contractId: string) {
-  const { error } = await requireSupabase().from("contracts").delete().eq("id", contractId);
+  const client = requireSupabase();
+  const { data: contract } = await client
+    .from("contracts")
+    .select("file_url")
+    .eq("id", contractId)
+    .maybeSingle();
+
+  await removeOrgStorageFileFromUrl(contract?.file_url);
+
+  const { error } = await client.from("contracts").delete().eq("id", contractId);
   if (error) throw new Error(error.message);
 }
 
@@ -515,7 +539,16 @@ export async function addDocument(
 }
 
 export async function deleteDocument(documentId: string) {
-  const { error } = await requireSupabase().from("documents").delete().eq("id", documentId);
+  const client = requireSupabase();
+  const { data: document } = await client
+    .from("documents")
+    .select("file_url")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  await removeOrgStorageFileFromUrl(document?.file_url);
+
+  const { error } = await client.from("documents").delete().eq("id", documentId);
   if (error) throw new Error(error.message);
 }
 

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { checkAndLogExtractUsage } from "../_shared/apiUsageLimit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -333,7 +334,7 @@ async function requireOrgMember(req: Request, organizationId: string) {
     return { error: jsonResponse({ error: "You do not have access to this workspace." }, 403) };
   }
 
-  return { user };
+  return { user, userClient };
 }
 
 Deno.serve(async (req) => {
@@ -395,6 +396,11 @@ Deno.serve(async (req) => {
 
   if (!isPdfBase64(fileBase64)) {
     return jsonResponse({ error: "File content is not a valid PDF." }, 400);
+  }
+
+  const rateLimit = await checkAndLogExtractUsage(access.userClient!, organizationId, "extract-contract");
+  if (!rateLimit.allowed) {
+    return jsonResponse({ error: rateLimit.message }, rateLimit.status);
   }
 
   try {

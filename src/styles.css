@@ -2191,6 +2191,26 @@ a.file-attachment-link:hover {
   margin-top: 20px;
 }
 
+.account-danger-zone {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, var(--border, #ddd));
+}
+
+.account-danger-action + .account-danger-action {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, #ddd);
+}
+
+.account-danger-title {
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.account-danger-button {
+  margin-top: 10px;
+}
+
 .billing-sidebar-nav {
   margin-top: 8px;
 }

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { deleteAccount, deleteOrganization } from "../api/account";
 import { fetchIsPlatformAdmin } from "../api/foundingApplication";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
@@ -15,8 +16,9 @@ function isValidEmail(value: string) {
 }
 
 export function AccountPage() {
-  const { user } = useAuth();
-  const { activeMembership, memberships } = useOrganization();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const { activeMembership, memberships, refreshMemberships } = useOrganization();
   const { isComplete, completedCount, totalSteps, openSetup } = useSetup();
   const [fullName, setFullName] = useState("");
   const [renewalNotificationEmail, setRenewalNotificationEmail] = useState("");
@@ -27,6 +29,10 @@ export function AccountPage() {
   const [termsAcceptedAt, setTermsAcceptedAt] = useState<string | null>(null);
   const [termsVersion, setTermsVersion] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [deleteOrgConfirm, setDeleteOrgConfirm] = useState("");
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState("");
+  const [deletingOrg, setDeletingOrg] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     void fetchIsPlatformAdmin().then(setIsPlatformAdmin);
@@ -100,6 +106,65 @@ export function AccountPage() {
   }
 
   const org = activeMembership?.organization;
+  const isOwner = activeMembership?.role === "owner";
+  const orgName = org?.name ?? "";
+  const orgDeletePhrase = orgName ? `delete ${orgName}` : "";
+
+  async function handleDeleteWorkspace() {
+    if (!org || !isOwner) return;
+
+    const confirmed = window.confirm(
+      `Delete workspace "${org.name}"? All vendors, contracts, documents, and files will be permanently removed. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    if (deleteOrgConfirm.trim().toLowerCase() !== orgDeletePhrase.toLowerCase()) {
+      setError(`Type "${orgDeletePhrase}" to confirm workspace deletion.`);
+      return;
+    }
+
+    setDeletingOrg(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteOrganization(org.id);
+      await refreshMemberships();
+      setDeleteOrgConfirm("");
+      setMessage(`Workspace "${org.name}" was deleted.`);
+      navigate("/app");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete workspace.");
+    } finally {
+      setDeletingOrg(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    const confirmed = window.confirm(
+      "Delete your SupplierSync account permanently? Your profile, outreach CRM data, and any workspaces where you are the only member will be removed. This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    if (deleteAccountConfirm.trim().toLowerCase() !== "delete my account") {
+      setError('Type "delete my account" to confirm account deletion.');
+      return;
+    }
+
+    setDeletingAccount(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteAccount();
+      await signOut();
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete account.");
+      setDeletingAccount(false);
+    }
+  }
+
   const subscriptionStatus = org?.subscriptionStatus ?? "trialing";
 
   return (
@@ -218,6 +283,66 @@ export function AccountPage() {
                 )}
               </p>
               <LegalFooter />
+            </article>
+
+            <article className="card account-danger-zone">
+              <p className="label">Danger zone</p>
+              <p className="muted small">
+                Permanently remove workspace data or your entire account. Cancel any active Stripe subscription
+                first from billing if applicable.
+              </p>
+
+              {isOwner && org && (
+                <div className="account-danger-action">
+                  <p className="account-danger-title">Delete workspace</p>
+                  <p className="muted small">
+                    Removes <strong>{org.name}</strong>, all vendors, contracts, uploaded files, and member
+                    access. Other members lose access immediately.
+                  </p>
+                  <label>
+                    Type <strong>{orgDeletePhrase}</strong> to confirm
+                    <input
+                      value={deleteOrgConfirm}
+                      onChange={(e) => setDeleteOrgConfirm(e.target.value)}
+                      placeholder={orgDeletePhrase}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="delete account-danger-button"
+                    onClick={() => void handleDeleteWorkspace()}
+                    disabled={deletingOrg || deletingAccount}
+                  >
+                    {deletingOrg ? "Deleting workspace…" : "Delete workspace"}
+                  </button>
+                </div>
+              )}
+
+              <div className="account-danger-action">
+                <p className="account-danger-title">Delete my account</p>
+                <p className="muted small">
+                  Removes your profile, outreach CRM, and sole-member workspaces. You must transfer ownership or
+                  delete shared workspaces first.
+                </p>
+                <label>
+                  Type <strong>delete my account</strong> to confirm
+                  <input
+                    value={deleteAccountConfirm}
+                    onChange={(e) => setDeleteAccountConfirm(e.target.value)}
+                    placeholder="delete my account"
+                    autoComplete="off"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="delete account-danger-button"
+                  onClick={() => void handleDeleteAccount()}
+                  disabled={deletingOrg || deletingAccount}
+                >
+                  {deletingAccount ? "Deleting account…" : "Delete my account"}
+                </button>
+              </div>
             </article>
           </div>
 
