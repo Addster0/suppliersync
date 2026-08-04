@@ -55,8 +55,9 @@ supabase secrets set \
   "SIGNUP_WEBHOOK_SECRET=${SIGNUP_WEBHOOK_SECRET}"
 
 echo ""
-echo "Deploying notify-founder-signup..."
-supabase functions deploy notify-founder-signup
+# pg_net invokes this without a JWT; auth is via x-signup-webhook-secret header.
+echo "Deploying notify-founder-signup (no JWT — pg_net calls without JWT; auth via x-signup-webhook-secret)..."
+supabase functions deploy notify-founder-signup --no-verify-jwt
 
 echo ""
 echo "Enable the database webhook (run in Supabase SQL editor as postgres):"

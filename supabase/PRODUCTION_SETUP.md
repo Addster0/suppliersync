@@ -58,8 +58,8 @@ npx supabase secrets list --project-ref bvrwyuwwxsruihkxeftm
 
 ```bash
 npx supabase functions deploy send-renewal-reminders --project-ref bvrwyuwwxsruihkxeftm
-npx supabase functions deploy notify-founder-signup --project-ref bvrwyuwwxsruihkxeftm
-npx supabase functions deploy notify-founding-application --project-ref bvrwyuwwxsruihkxeftm
+npx supabase functions deploy notify-founder-signup --no-verify-jwt --project-ref bvrwyuwwxsruihkxeftm
+npx supabase functions deploy notify-founding-application --no-verify-jwt --project-ref bvrwyuwwxsruihkxeftm
 npx supabase functions deploy create-checkout-session --project-ref bvrwyuwwxsruihkxeftm
 npx supabase functions deploy create-portal-session --project-ref bvrwyuwwxsruihkxeftm
 ```
