@@ -8,6 +8,7 @@ import { ItemFilterChips } from "../components/ItemFilterChips";
 import { RenewalRow, RenewalsEmptyState } from "../components/RenewalRow";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
+import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { openClinicReport } from "../lib/clinicReport";
 import { openDigestReportPreview } from "../lib/digestReport";
 import { RENEWAL_LOOKAHEAD_DAYS, RENEWAL_RECENT_EXPIRED_DAYS, urgencyLabel } from "../lib/renewals";
@@ -387,12 +388,12 @@ export function RenewalsPage() {
   }
 
   return (
-    <main className="shell renewals-shell">
+    <main className="shell renewals-shell" id={MAIN_CONTENT_ID}>
         <section className="content renewals-content">
           <header className="topbar">
             <div>
               <p className="eyebrow">Renewals</p>
-              <h2>Vendor contract deadlines</h2>
+              <h1>Vendor contract deadlines</h1>
               <p className="muted">
                 Track renewal and review dates before auto-renewals or missed notice windows. Owners and admins get
                 email digests at 90, 30, and 7 days out, plus on the due date.
@@ -503,8 +504,16 @@ export function RenewalsPage() {
               </div>
             )}
 
-            {emailMessage && <div className="banner success renewals-email-banner">{emailMessage}</div>}
-            {emailError && <div className="banner error renewals-email-banner">{emailError}</div>}
+            {emailMessage && (
+              <div className="banner success renewals-email-banner" role="status" aria-live="polite">
+                {emailMessage}
+              </div>
+            )}
+            {emailError && (
+              <div className="banner error renewals-email-banner" role="alert">
+                {emailError}
+              </div>
+            )}
           </section>
 
           <section className="card renewals-email-card">
@@ -627,7 +636,11 @@ export function RenewalsPage() {
             )}
           </section>
 
-          {error && <div className="banner error">{error}</div>}
+          {error && (
+            <div className="banner error" role="alert">
+              {error}
+            </div>
+          )}
 
           <ItemFilterChips
             value={listFilter}

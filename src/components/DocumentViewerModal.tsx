@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openFileUrl, resolveStorageUrl } from "../api/vendors";
+import { useFocusTrap } from "../lib/a11y";
 import {
   formatFileSize,
   getFilePreviewKind,
@@ -25,7 +26,10 @@ export function DocumentViewerModal({
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
   const previewKind = getFilePreviewKind(fileName, mimeType);
+
+  useFocusTrap(dialogRef, true);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -72,20 +76,18 @@ export function DocumentViewerModal({
   }, [fileUrl]);
 
   return (
-    <div
-      className="doc-viewer-backdrop"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="doc-viewer-title"
-    >
+    <div className="doc-viewer-backdrop" onClick={onClose}>
       <div
+        ref={dialogRef}
         className={`doc-viewer card${previewKind !== "other" ? " doc-viewer--preview" : ""}`}
         onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="doc-viewer-title"
       >
         <header className="doc-viewer-head">
           <div>
-            <h3 id="doc-viewer-title">{fileName}</h3>
+            <h2 id="doc-viewer-title">{fileName}</h2>
             {fileSize != null && <p className="muted small">{formatFileSize(fileSize)}</p>}
           </div>
           <button type="button" className="ghost" onClick={onClose}>
@@ -94,8 +96,12 @@ export function DocumentViewerModal({
         </header>
 
         <div className="doc-viewer-body">
-          {loading && <p className="muted">Loading document…</p>}
-          {error && <p className="form-error">{error}</p>}
+          {loading && <p className="muted" role="status" aria-live="polite">Loading document…</p>}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           {!loading && !error && url && previewKind === "pdf" && (
             <iframe
               title={fileName}

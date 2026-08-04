@@ -1,10 +1,11 @@
-import { FormEvent, type ReactNode, useEffect, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { BrandLogo } from "../components/BrandLogo";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { LegalFooter } from "../components/LegalFooter";
 import { acceptTerms } from "../api/profile";
+import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { APP_TAGLINE } from "../lib/brand";
 import { LEGAL_LAST_UPDATED, TERMS_VERSION } from "../lib/legal";
 import { fetchFoundingProgramStatus, formatMonthlyPrice, isTrialExpired } from "../lib/stripe";
@@ -16,6 +17,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const emailId = useId();
+  const passwordId = useId();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -37,13 +40,21 @@ export function LoginPage() {
       }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
+        <label htmlFor={emailId}>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          <input
+            id={emailId}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
         </label>
-        <label>
+        <label htmlFor={passwordId}>
           Password
           <input
+            id={passwordId}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -55,7 +66,11 @@ export function LoginPage() {
         <p className="auth-inline-link">
           <Link to="/forgot-password">Forgot password?</Link>
         </p>
-        {error && <p className="form-error">{error}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         <button type="submit" className="auth-submit" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </button>
@@ -70,6 +85,7 @@ export function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const emailId = useId();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -99,7 +115,9 @@ export function ForgotPasswordPage() {
     >
       {message ? (
         <>
-          <p className="auth-success">{message}</p>
+          <p className="auth-success" role="status" aria-live="polite">
+            {message}
+          </p>
           <p className="muted small">
             Didn&apos;t get it? Check spam, or{" "}
             <button
@@ -117,11 +135,22 @@ export function ForgotPasswordPage() {
         </>
       ) : (
         <form className="auth-form" onSubmit={handleSubmit}>
-          <label>
+          <label htmlFor={emailId}>
             Email
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+            <input
+              id={emailId}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
           </label>
-          {error && <p className="form-error">{error}</p>}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           <button type="submit" className="auth-submit" disabled={loading}>
             {loading ? "Sending link…" : "Send reset link"}
           </button>
@@ -138,6 +167,8 @@ export function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const passwordId = useId();
+  const confirmPasswordId = useId();
 
   const canReset = Boolean(session && recoveryMode);
 
@@ -223,9 +254,10 @@ export function ResetPasswordPage() {
       }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
+        <label htmlFor={passwordId}>
           New password
           <input
+            id={passwordId}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -234,9 +266,10 @@ export function ResetPasswordPage() {
             autoComplete="new-password"
           />
         </label>
-        <label>
+        <label htmlFor={confirmPasswordId}>
           Confirm password
           <input
+            id={confirmPasswordId}
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -245,7 +278,11 @@ export function ResetPasswordPage() {
             autoComplete="new-password"
           />
         </label>
-        {error && <p className="form-error">{error}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         <button type="submit" className="auth-submit" disabled={loading}>
           {loading ? "Saving…" : "Update password"}
         </button>
@@ -263,6 +300,10 @@ export function SignupPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const fullNameId = useId();
+  const emailId = useId();
+  const passwordId = useId();
+  const termsId = useId();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -296,17 +337,31 @@ export function SignupPage() {
       }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
+        <label htmlFor={fullNameId}>
           Full name
-          <input value={fullName} onChange={(e) => setFullName(e.target.value)} required autoComplete="name" />
+          <input
+            id={fullNameId}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            autoComplete="name"
+          />
         </label>
-        <label>
+        <label htmlFor={emailId}>
           Work email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          <input
+            id={emailId}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
         </label>
-        <label>
+        <label htmlFor={passwordId}>
           Password
           <input
+            id={passwordId}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -315,8 +370,9 @@ export function SignupPage() {
             autoComplete="new-password"
           />
         </label>
-        <label className="legal-consent">
+        <label className="legal-consent" htmlFor={termsId}>
           <input
+            id={termsId}
             checked={acceptedTerms}
             onChange={(event) => setAcceptedTerms(event.target.checked)}
             required
@@ -334,8 +390,16 @@ export function SignupPage() {
             .
           </span>
         </label>
-        {error && <p className="form-error">{error}</p>}
-        {message && <p className="auth-success">{message}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p className="auth-success" role="status" aria-live="polite">
+            {message}
+          </p>
+        )}
         <button type="submit" className="auth-submit" disabled={loading || !acceptedTerms}>
           {loading ? "Creating account…" : "Create account"}
         </button>
@@ -357,6 +421,9 @@ function AuthShell({
 }) {
   return (
     <div className="auth-layout">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
       <header className="auth-layout-nav">
         <BrandLogo variant="nav" linkTo="/" />
         <Link className="auth-layout-home" to="/">
@@ -367,7 +434,7 @@ function AuthShell({
       <div className="auth-layout-main">
         <div className="auth-promo">
           <p className="eyebrow">Private clinic vendor ops</p>
-          <h2>One workspace for vendors, contracts, compliance files, and spend.</h2>
+          <p className="auth-promo-heading">One workspace for vendors, contracts, compliance files, and spend.</p>
           <ul className="auth-promo-list">
             <li>Secure, isolated clinic data</li>
             <li>Real search across your records</li>
@@ -375,14 +442,14 @@ function AuthShell({
           </ul>
         </div>
 
-        <div className="auth-card">
+        <main className="auth-card" id={MAIN_CONTENT_ID}>
           <h1>{title}</h1>
           <p className="auth-card-subtitle">{subtitle}</p>
           <p className="auth-card-tagline muted small">{APP_TAGLINE}</p>
           {children}
           <p className="auth-footer">{footer}</p>
           <LegalFooter className="auth-legal-footer" />
-        </div>
+        </main>
       </div>
     </div>
   );
@@ -426,7 +493,10 @@ export function ConfigRequiredPage({ issues = ["missing"] }: { issues?: Supabase
 
   return (
     <div className="auth-layout auth-layout--centered">
-      <div className="auth-card">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
+      <main className="auth-card" id={MAIN_CONTENT_ID}>
         <BrandLogo variant="auth" linkTo={null} />
         <p className="eyebrow">Setup required</p>
         <h1>{copy.title}</h1>
@@ -438,7 +508,7 @@ export function ConfigRequiredPage({ issues = ["missing"] }: { issues?: Supabase
         <Link className="marketing-button primary auth-submit-link" to="/">
           Back to home
         </Link>
-      </div>
+      </main>
     </div>
   );
 }
@@ -448,7 +518,10 @@ export function SupabaseUnreachablePage({ reason = "network" }: { reason?: "netw
 
   return (
     <div className="auth-layout auth-layout--centered">
-      <div className="auth-card">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
+      <main className="auth-card" id={MAIN_CONTENT_ID}>
         <BrandLogo variant="auth" linkTo={null} />
         <p className="eyebrow">Connection problem</p>
         <h1>{isServerError ? "Supabase is unavailable" : "Cannot reach Supabase"}</h1>
@@ -481,7 +554,7 @@ export function SupabaseUnreachablePage({ reason = "network" }: { reason?: "netw
         <Link className="marketing-button primary auth-submit-link" to="/">
           Back to home
         </Link>
-      </div>
+      </main>
     </div>
   );
 }
@@ -492,6 +565,7 @@ export function CreateOrganizationPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [foundingHint, setFoundingHint] = useState("");
+  const nameId = useId();
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -523,18 +597,27 @@ export function CreateOrganizationPage() {
       subtitle="Your clinic gets its own secure vendor data. You’ll be the owner."
       footer="You can invite teammates in a future update."
     >
-      {foundingHint && <p className="auth-success">{foundingHint}</p>}
+      {foundingHint && (
+        <p className="auth-success" role="status" aria-live="polite">
+          {foundingHint}
+        </p>
+      )}
       <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
+        <label htmlFor={nameId}>
           Clinic / company name
           <input
+            id={nameId}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Adeleinc Medical"
             required
           />
         </label>
-        {error && <p className="form-error">{error}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         <button type="submit" className="auth-submit" disabled={loading}>
           {loading ? "Creating workspace…" : "Create workspace"}
         </button>
@@ -552,6 +635,7 @@ export function TermsAcceptancePage({ onAccepted }: { onAccepted: () => void }) 
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const termsId = useId();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -572,7 +656,10 @@ export function TermsAcceptancePage({ onAccepted }: { onAccepted: () => void }) 
 
   return (
     <div className="auth-layout auth-layout--centered">
-      <div className="auth-card">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
+      <main className="auth-card" id={MAIN_CONTENT_ID}>
         <BrandLogo variant="auth" linkTo="/" />
         <p className="eyebrow">Terms of Service</p>
         <h1>Review and accept</h1>
@@ -581,8 +668,9 @@ export function TermsAcceptancePage({ onAccepted }: { onAccepted: () => void }) 
           continue using SupplierSync.
         </p>
         <form className="auth-form" onSubmit={handleSubmit}>
-          <label className="legal-consent">
+          <label className="legal-consent" htmlFor={termsId}>
             <input
+              id={termsId}
               checked={accepted}
               onChange={(event) => setAccepted(event.target.checked)}
               required
@@ -600,7 +688,11 @@ export function TermsAcceptancePage({ onAccepted }: { onAccepted: () => void }) 
               .
             </span>
           </label>
-          {error && <p className="form-error">{error}</p>}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           <button type="submit" className="auth-submit" disabled={loading || !accepted}>
             {loading ? "Saving…" : "I agree — continue"}
           </button>
@@ -617,7 +709,7 @@ export function TermsAcceptancePage({ onAccepted }: { onAccepted: () => void }) 
           </button>
         </p>
         <LegalFooter className="auth-legal-footer" />
-      </div>
+      </main>
     </div>
   );
 }
@@ -629,7 +721,10 @@ export function SubscriptionBlockedPage() {
 
   return (
     <div className="auth-layout auth-layout--centered">
-      <div className="auth-card">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
+      <main className="auth-card" id={MAIN_CONTENT_ID}>
         <BrandLogo variant="auth" linkTo="/" />
         <p className="eyebrow">Subscription</p>
         <h1>{trialExpired ? "Free trial ended" : "Workspace access paused"}</h1>
@@ -644,7 +739,7 @@ export function SubscriptionBlockedPage() {
         <Link className="marketing-button secondary auth-submit-link" to="/app/account">
           My account
         </Link>
-      </div>
+      </main>
     </div>
   );
 }

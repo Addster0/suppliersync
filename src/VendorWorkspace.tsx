@@ -1,6 +1,7 @@
 import { DragEvent, FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { acknowledgeAiDisclosureIfNeeded } from "./lib/aiDisclosure";
+import { MAIN_CONTENT_ID } from "./lib/a11y";
 import {
   extractContractFromPdf,
   fetchContractExtractStatus,
@@ -631,8 +632,8 @@ export function VendorWorkspace() {
   const readOnly = !canWrite;
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
+    <main className="shell" id={MAIN_CONTENT_ID}>
+      <aside className="sidebar" aria-label="Vendor navigation">
         <div>
           <BrandLogo variant="sidebar" linkTo="/" />
           <p className="eyebrow sidebar-workspace">{activeMembership?.organization.name ?? "Workspace"}</p>
@@ -710,8 +711,15 @@ export function VendorWorkspace() {
               }}
             />
             <form className="quick-add" onSubmit={addVendor}>
-              <input name="name" placeholder="New vendor name" />
+              <label className="sr-only" htmlFor="quick-vendor-name">
+                New vendor name
+              </label>
+              <input id="quick-vendor-name" name="name" placeholder="New vendor name" />
+              <label className="sr-only" htmlFor="quick-vendor-category">
+                Category
+              </label>
               <input
+                id="quick-vendor-category"
                 name="category"
                 onChange={(event) => setQuickVendorCategory(event.target.value)}
                 placeholder="Category (e.g. Lab, IT)"
@@ -739,6 +747,8 @@ export function VendorWorkspace() {
                   else vendorButtonRefs.current.delete(vendor.id);
                 }}
                 className={vendor.id === selectedVendor?.id ? "vendor-button selected" : "vendor-button"}
+                aria-current={vendor.id === selectedVendor?.id ? "true" : undefined}
+                aria-label={`${vendor.name}, ${vendor.category}`}
                 onClick={() => selectVendor(vendor.id)}
               >
                 <span className="vendor-button-name">
@@ -791,6 +801,7 @@ export function VendorWorkspace() {
       </aside>
 
       <section className="content">
+        <h1 className="sr-only">Vendor workspace</h1>
         {showImport && canWrite && organizationId && (
           <div ref={importPanelAnchorRef}>
             <VendorImportPanel
@@ -803,8 +814,16 @@ export function VendorWorkspace() {
           </div>
         )}
         <RenewalsSummary organizationId={organizationId} compact />
-        {loadError && <div className="banner error">{loadError}</div>}
-        {bannerMessage && <div className="banner">{bannerMessage}</div>}
+        {loadError && (
+          <div className="banner error" role="alert">
+            {loadError}
+          </div>
+        )}
+        {bannerMessage && (
+          <div className="banner" role="status" aria-live="polite">
+            {bannerMessage}
+          </div>
+        )}
         {canWrite && sampleVendorCount > 0 && (
           <div className="banner sample-vendors-banner">
             <span>

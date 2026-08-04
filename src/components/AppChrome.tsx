@@ -7,6 +7,7 @@ import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetupOptional } from "../contexts/SetupContext";
 
 import { getTrialDaysRemaining, isOnActiveTrial } from "../lib/stripe";
+import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { ProfileMenu } from "./ProfileMenu";
 
 type AppPath = "/app" | "/app/renewals" | "/app/billing" | "/app/account" | "/outreach";
@@ -34,6 +35,9 @@ export function AppChrome({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-chrome">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
+        Skip to main content
+      </a>
       {trialDaysRemaining != null && (
         <div className="banner trial-banner">
           <span>
@@ -51,22 +55,29 @@ export function AppChrome({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="app-topbar-tabs" aria-label="Main sections">
-          <Link className={`app-topbar-tab${tabActive(pathname, "/app") ? " is-active" : ""}`} to="/app">
+          <Link
+            aria-current={tabActive(pathname, "/app") ? "page" : undefined}
+            className={`app-topbar-tab${tabActive(pathname, "/app") ? " is-active" : ""}`}
+            to="/app"
+          >
             Vendors
           </Link>
           <Link
+            aria-current={tabActive(pathname, "/app/renewals") ? "page" : undefined}
             className={`app-topbar-tab${tabActive(pathname, "/app/renewals") ? " is-active" : ""}`}
             to="/app/renewals"
           >
             Renewals
           </Link>
           <Link
+            aria-current={tabActive(pathname, "/app/billing") ? "page" : undefined}
             className={`app-topbar-tab${tabActive(pathname, "/app/billing") ? " is-active" : ""}`}
             to="/app/billing"
           >
             Billing
           </Link>
           <Link
+            aria-current={tabActive(pathname, "/app/account") ? "page" : undefined}
             className={`app-topbar-tab${tabActive(pathname, "/app/account") ? " is-active" : ""}`}
             to="/app/account"
           >
@@ -74,6 +85,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
           </Link>
           {isPlatformAdmin && (
             <Link
+              aria-current={tabActive(pathname, "/outreach") ? "page" : undefined}
               className={`app-topbar-tab outreach-nav-tab${tabActive(pathname, "/outreach") ? " is-active" : ""}`}
               to="/outreach"
             >
@@ -84,7 +96,12 @@ export function AppChrome({ children }: { children: ReactNode }) {
 
         <div className="app-topbar-actions">
           {setup && canWrite && !setup.loading && !setup.isComplete && (
-            <button className="setup-chip" onClick={setup.openSetup} type="button">
+            <button
+              aria-label={`Resume workspace setup, ${setup.completedCount} of ${setup.totalSteps} steps complete`}
+              className="setup-chip"
+              onClick={setup.openSetup}
+              type="button"
+            >
               Setup · {setup.completedCount}/{setup.totalSteps}
             </button>
           )}

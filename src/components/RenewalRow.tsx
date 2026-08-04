@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FormEvent, useState } from "react";
+import { FormEvent, useId, useState } from "react";
 import { DocumentViewerModal } from "./DocumentViewerModal";
 import { FileAttachmentLink } from "./FileAttachmentLink";
 import type { RenewalItem } from "../types";
@@ -25,6 +25,7 @@ export function RenewalRow({
   const [handleNote, setHandleNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
+  const handleNoteId = useId();
 
   async function submitHandled(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,9 +105,10 @@ export function RenewalRow({
             </button>
           ) : (
             <form className="renewal-handle-form" onSubmit={(event) => void submitHandled(event)}>
-              <label className="field-block">
+              <label className="field-block" htmlFor={handleNoteId}>
                 <span className="label">Optional note</span>
                 <input
+                  id={handleNoteId}
                   value={handleNote}
                   onChange={(event) => setHandleNote(event.target.value)}
                   placeholder="e.g. Renewed for 12 months"
@@ -140,7 +142,11 @@ export function RenewalRow({
           </button>
         </div>
       )}
-      {actionError && <p className="form-error renewal-row-error">{actionError}</p>}
+      {actionError && (
+        <p className="form-error renewal-row-error" role="alert">
+          {actionError}
+        </p>
+      )}
       {viewingFile && item.fileUrl && item.fileName && (
         <DocumentViewerModal
           fileUrl={item.fileUrl}

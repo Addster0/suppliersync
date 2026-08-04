@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   addContact,
@@ -10,6 +10,7 @@ import {
 } from "../api/vendors";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetup } from "../contexts/SetupContext";
+import { useFocusTrap } from "../lib/a11y";
 import { openClinicReport } from "../lib/clinicReport";
 import { CONTRACT_END_HINT, CONTRACT_END_LABEL } from "../lib/renewals";
 import type { SetupStepId } from "../lib/onboarding";
@@ -55,6 +56,18 @@ export function SetupGuide() {
   const [vendorCategory, setVendorCategory] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
   const [templateHint, setTemplateHint] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, setupOpen);
+
+  useEffect(() => {
+    if (!setupOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeSetup();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [setupOpen, closeSetup]);
 
   useEffect(() => {
     if (!setupOpen) return;
@@ -247,8 +260,14 @@ export function SetupGuide() {
   }
 
   return (
-    <div className="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
-      <section className="setup-guide card">
+    <div className="setup-overlay">
+      <section
+        ref={dialogRef}
+        className="setup-guide card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="setup-title"
+      >
         <header className="setup-guide-header">
           <div>
             <p className="eyebrow">Workspace setup</p>

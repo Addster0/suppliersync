@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { deleteAccount, deleteOrganization } from "../api/account";
 import { downloadOrganizationExport, exportOrganizationData } from "../api/export";
@@ -8,6 +8,7 @@ import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetup } from "../contexts/SetupContext";
 import { LegalFooter } from "../components/LegalFooter";
 import { SystemHealthPanel } from "../components/SystemHealthPanel";
+import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { TERMS_VERSION } from "../lib/legal";
 import { formatMonthlyPrice, getLockedPriceCents, getPlanLabel, getTrialDaysRemaining, isOnActiveTrial, isSubscriptionActive } from "../lib/stripe";
 import { requireSupabase } from "../lib/supabase";
@@ -35,6 +36,10 @@ export function AccountPage() {
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const fullNameId = useId();
+  const renewalEmailId = useId();
+  const deleteOrgConfirmId = useId();
+  const deleteAccountConfirmId = useId();
 
   useEffect(() => {
     void fetchIsPlatformAdmin().then(setIsPlatformAdmin);
@@ -188,18 +193,26 @@ export function AccountPage() {
   const subscriptionStatus = org?.subscriptionStatus ?? "trialing";
 
   return (
-    <main className="shell account-shell">
+    <main className="shell account-shell" id={MAIN_CONTENT_ID}>
         <section className="content account-content">
           <header className="topbar">
             <div>
               <p className="eyebrow">My account</p>
-              <h2>Your profile & workspace</h2>
+              <h1>Your profile & workspace</h1>
               <p className="muted">Signed-in user settings for SupplierSync.</p>
             </div>
           </header>
 
-          {message && <div className="banner">{message}</div>}
-          {error && <div className="banner error">{error}</div>}
+          {message && (
+            <div className="banner" role="status" aria-live="polite">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="banner error" role="alert">
+              {error}
+            </div>
+          )}
 
           {!isComplete && (
             <div className="banner account-setup-banner">
@@ -217,18 +230,24 @@ export function AccountPage() {
                 <p className="muted small">Loading profile…</p>
               ) : (
                 <form className="auth-form account-form" onSubmit={handleSave}>
-                  <label>
+                  <label htmlFor={fullNameId}>
                     Full name
-                    <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                    <input
+                      id={fullNameId}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                    />
                   </label>
-                  <label>
+                  <label htmlFor="account-email">
                     Email
-                    <input value={user?.email ?? ""} disabled />
+                    <input id="account-email" value={user?.email ?? ""} disabled />
                   </label>
                   <p className="muted small">Email is managed by your login and cannot be changed here yet.</p>
-                  <label>
+                  <label htmlFor={renewalEmailId}>
                     Renewal reminder email
                     <input
+                      id={renewalEmailId}
                       type="email"
                       value={renewalNotificationEmail}
                       onChange={(e) => setRenewalNotificationEmail(e.target.value)}
@@ -337,9 +356,10 @@ export function AccountPage() {
                     Removes <strong>{org.name}</strong>, all vendors, contracts, uploaded files, and member
                     access. Other members lose access immediately.
                   </p>
-                  <label>
+                  <label htmlFor={deleteOrgConfirmId}>
                     Type <strong>{orgDeletePhrase}</strong> to confirm
                     <input
+                      id={deleteOrgConfirmId}
                       value={deleteOrgConfirm}
                       onChange={(e) => setDeleteOrgConfirm(e.target.value)}
                       placeholder={orgDeletePhrase}
@@ -363,9 +383,10 @@ export function AccountPage() {
                   Removes your profile, outreach CRM, and sole-member workspaces. You must transfer ownership or
                   delete shared workspaces first.
                 </p>
-                <label>
+                <label htmlFor={deleteAccountConfirmId}>
                   Type <strong>delete my account</strong> to confirm
                   <input
+                    id={deleteAccountConfirmId}
                     value={deleteAccountConfirm}
                     onChange={(e) => setDeleteAccountConfirm(e.target.value)}
                     placeholder="delete my account"

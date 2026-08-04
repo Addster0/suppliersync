@@ -59,8 +59,8 @@ export function ProfileMenu({
         className="profile-menu-trigger"
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="Account menu"
         onClick={() => setOpen((value) => !value)}
-        title="Account menu"
       >
         <span className="profile-menu-avatar" aria-hidden="true">
           {profileInitials(user)}
