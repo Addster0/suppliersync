@@ -115,7 +115,8 @@ export type Organization = {
   lockedMonthlyPriceCents: number | null;
   foundingEnrolledAt: string | null;
   renewalRemindersEnabled: boolean;
-  weeklyDigestEnabled: boolean;
+  monthlyDigestEnabled: boolean;
+  annualDigestEnabled: boolean;
 };
 
 export type OrganizationMembership = {

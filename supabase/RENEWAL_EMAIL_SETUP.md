@@ -44,7 +44,8 @@ In Supabase → **SQL Editor**, run:
 - `supabase/migrations/006_renewal_email_reminders.sql`
 - `supabase/migrations/007_sync_profile_email.sql`
 - `supabase/migrations/008_document_expiry.sql`
-- `supabase/migrations/009_weekly_digest.sql`
+- `supabase/migrations/009_weekly_digest.sql` (superseded by 027)
+- `supabase/migrations/027_monthly_annual_digest.sql`
 
 ## 2. Secrets
 
@@ -75,17 +76,29 @@ curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminde
   -d '{"mode":"cron"}'
 ```
 
-**Weekly action items digest** (Mondays — one email per workspace per week when items exist):
+**Monthly vendor report** (1st of each month — visual spend and scorecard report):
 
 ```bash
 curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders" \
   -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
   -H "x-cron-secret: YOUR_CRON_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"mode":"weekly_cron"}'
+  -d '{"mode":"monthly_cron"}'
 ```
 
-Schedule `weekly_cron` once per day (e.g. Monday 8am). Orgs with `weekly_digest_enabled = false` are skipped.
+Schedule `monthly_cron` once per day (e.g. 8am). Sends only on the 1st. Orgs with `monthly_digest_enabled = false` are skipped.
+
+**Annual vendor report** (January 1 — year-in-review report):
+
+```bash
+curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "x-cron-secret: YOUR_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"annual_cron"}'
+```
+
+Schedule `annual_cron` once per day. Sends only on January 1. Orgs with `annual_digest_enabled = false` are skipped.
 
 ## 5. Test from the app
 

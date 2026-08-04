@@ -129,7 +129,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     bullets: [
       "Provide, maintain, and improve the Service.",
       "Authenticate users and enforce workspace access controls.",
-      "Send transactional messages such as renewal reminders or weekly digests you enable.",
+      "Send transactional messages such as renewal reminders or vendor reports you enable.",
       "Respond to support requests and protect against abuse or security incidents.",
       "Comply with legal obligations.",
     ],
@@ -159,7 +159,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: "7. Your choices",
     paragraphs: [
       "You may access and update profile information in the app. Workspace owners control clinic records inside their workspace.",
-      "You may opt out of non-essential emails where the product provides controls (for example, digest settings).",
+      "You may opt out of non-essential emails where the product provides controls (for example, report email settings).",
       "Contact us to request export or deletion assistance for your account.",
     ],
   },

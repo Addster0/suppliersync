@@ -519,7 +519,7 @@ export function SetupGuide() {
             <div className="setup-complete card">
               <strong>Setup complete</strong>
               <p className="muted small">
-                Renewals and action items will populate as you add more vendors. Turn on email digests on the Renewals
+                Renewals and action items will populate as you add more vendors. Turn on email reports on the Renewals
                 page.
               </p>
               <div className="setup-panel-actions">

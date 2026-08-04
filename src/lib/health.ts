@@ -6,7 +6,7 @@ import {
   getSupabaseStorageBucketsUrl,
   probeOrgStorage,
 } from "./storage";
-import { checkSupabaseReachable } from "./supabase";
+import { checkSupabaseConnection } from "./supabase";
 
 export type HealthCheck = {
   id: "supabase" | "storage" | "contract_extract";
@@ -18,23 +18,30 @@ export type HealthCheck = {
 };
 
 export async function runSystemHealthChecks(organizationId?: string): Promise<HealthCheck[]> {
-  const [supabaseOk, storageProbe, extractStatus] = await Promise.all([
-    checkSupabaseReachable(),
+  const [supabaseStatus, storageProbe, extractStatus] = await Promise.all([
+    checkSupabaseConnection(),
     probeOrgStorage(organizationId),
     fetchContractExtractStatus(),
   ]);
 
+  const supabaseOk = supabaseStatus.ok;
   const storageOk = storageProbe.status === "ok";
   const extractOk = extractStatus.reachable !== false && extractStatus.configured;
+
+  const supabaseDetail = supabaseOk
+    ? "Your Supabase project is online and reachable."
+    : supabaseStatus.reason === "invalid_key"
+      ? "Supabase rejected the anon key. Copy a fresh key from Project Settings → API and redeploy."
+      : supabaseStatus.reason === "server_error"
+        ? "Supabase returned a server error. Check status.supabase.com or try again shortly."
+        : "Cannot reach Supabase. Confirm the project is active and env keys match the restored project.";
 
   return [
     {
       id: "supabase",
       label: "Database & sign-in",
       ok: supabaseOk,
-      detail: supabaseOk
-        ? "Your Supabase project is online and reachable."
-        : "Cannot reach Supabase. Confirm the project is active and env keys match the restored project.",
+      detail: supabaseDetail,
     },
     {
       id: "storage",

@@ -5,7 +5,12 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { OrganizationProvider, useOrganization } from "./contexts/OrganizationContext";
 import { hasAcceptedCurrentTerms } from "./lib/legal";
 import { isSubscriptionActive } from "./lib/stripe";
-import { checkSupabaseReachable, isSupabaseConfigValid, supabaseConfigIssues } from "./lib/supabase";
+import {
+  checkSupabaseConnection,
+  isSupabaseConfigValid,
+  supabaseConfigIssues,
+  type SupabaseConnectionFailure,
+} from "./lib/supabase";
 import {
   ConfigRequiredPage,
   CreateOrganizationPage,
@@ -175,13 +180,13 @@ function AppRoutes() {
 
 function SupabaseConnectionGate({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(true);
-  const [reachable, setReachable] = useState(true);
+  const [failure, setFailure] = useState<SupabaseConnectionFailure | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    void checkSupabaseReachable().then((ok) => {
+    void checkSupabaseConnection().then((status) => {
       if (mounted) {
-        setReachable(ok);
+        setFailure(status.ok ? null : status.reason);
         setChecking(false);
       }
     });
@@ -191,7 +196,8 @@ function SupabaseConnectionGate({ children }: { children: ReactNode }) {
   }, []);
 
   if (checking) return <LoadingScreen />;
-  if (!reachable) return <SupabaseUnreachablePage />;
+  if (failure === "invalid_key") return <ConfigRequiredPage issues={["invalid_anon_key"]} />;
+  if (failure) return <SupabaseUnreachablePage reason={failure} />;
   return <>{children}</>;
 }
 

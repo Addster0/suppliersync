@@ -25,7 +25,7 @@ const OrganizationContext = createContext<OrganizationContextValue | null>(null)
 
 const WRITE_ROLES: OrgRole[] = ["owner", "admin", "member"];
 
-const ORG_SELECT_CORE = `
+const ORG_SELECT_BASE = `
   id,
   name,
   plan,
@@ -33,14 +33,17 @@ const ORG_SELECT_CORE = `
   is_founding,
   locked_monthly_price_cents,
   founding_enrolled_at,
-  renewal_reminders_enabled,
-  weekly_digest_enabled
+  renewal_reminders_enabled
 `;
 
-const ORG_SELECT_WITH_TRIAL = `
-  ${ORG_SELECT_CORE.trim()},
-  trial_ends_at
-`;
+/** Tried in order until one succeeds (027 drops weekly_digest_enabled; 013 adds trial_ends_at). */
+const ORG_SELECT_VARIANTS = [
+  `${ORG_SELECT_BASE.trim()}, monthly_digest_enabled, annual_digest_enabled, trial_ends_at`,
+  `${ORG_SELECT_BASE.trim()}, weekly_digest_enabled, trial_ends_at`,
+  `${ORG_SELECT_BASE.trim()}, monthly_digest_enabled, annual_digest_enabled`,
+  `${ORG_SELECT_BASE.trim()}, weekly_digest_enabled`,
+  ORG_SELECT_BASE.trim(),
+];
 
 type OrganizationRow = {
   id: string;
@@ -52,11 +55,38 @@ type OrganizationRow = {
   locked_monthly_price_cents: number | null;
   founding_enrolled_at: string | null;
   renewal_reminders_enabled: boolean;
-  weekly_digest_enabled: boolean;
+  weekly_digest_enabled?: boolean;
+  monthly_digest_enabled?: boolean;
+  annual_digest_enabled?: boolean;
 };
 
 function isMissingColumnError(error: { code?: string; message?: string }) {
   return error.code === "42703" || /column .+ does not exist/i.test(error.message ?? "");
+}
+
+function memberSelect(orgFields: string) {
+  return `
+    id,
+    role,
+    organization_id,
+    organizations (${orgFields})
+  `;
+}
+
+async function fetchMembershipRows(userId: string) {
+  const client = requireSupabase();
+
+  for (const orgFields of ORG_SELECT_VARIANTS) {
+    const { data, error } = await client
+      .from("organization_members")
+      .select(memberSelect(orgFields))
+      .eq("user_id", userId);
+
+    if (!error) return { data: data ?? [], error: null };
+    if (!isMissingColumnError(error)) return { data: null, error };
+  }
+
+  return { data: null, error: { message: "Could not load workspace columns." } };
 }
 
 function mapMembershipRows(data: unknown[]) {
@@ -70,7 +100,12 @@ function mapMembershipRows(data: unknown[]) {
 
     const org = member.organizations;
     const organization = Array.isArray(org) ? org[0] : org;
-    if (!organization) return [];
+    if (!organization) {
+      console.warn("Membership row missing organization (check organizations RLS):", member.organization_id);
+      return [];
+    }
+
+    const legacyWeeklyDigest = organization.weekly_digest_enabled ?? true;
 
     return [
       {
@@ -87,7 +122,8 @@ function mapMembershipRows(data: unknown[]) {
           lockedMonthlyPriceCents: organization.locked_monthly_price_cents,
           foundingEnrolledAt: organization.founding_enrolled_at,
           renewalRemindersEnabled: organization.renewal_reminders_enabled ?? true,
-          weeklyDigestEnabled: organization.weekly_digest_enabled ?? true,
+          monthlyDigestEnabled: organization.monthly_digest_enabled ?? legacyWeeklyDigest,
+          annualDigestEnabled: organization.annual_digest_enabled ?? legacyWeeklyDigest,
         },
       },
     ];
@@ -109,34 +145,17 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    const client = requireSupabase();
-    const memberSelect = (orgFields: string) => `
-        id,
-        role,
-        organization_id,
-        organizations (${orgFields})
-      `;
 
-    let { data, error } = await client
-      .from("organization_members")
-      .select(memberSelect(ORG_SELECT_WITH_TRIAL))
-      .eq("user_id", user.id);
-
-    if (error && isMissingColumnError(error)) {
-      ({ data, error } = await client
-        .from("organization_members")
-        .select(memberSelect(ORG_SELECT_CORE))
-        .eq("user_id", user.id));
-    }
+    const { data, error } = await fetchMembershipRows(user.id);
 
     if (error) {
-      console.error(error);
+      console.error("Failed to load workspaces:", error);
       setMemberships([]);
       setLoading(false);
       return;
     }
 
-    const mapped: OrganizationMembership[] = mapMembershipRows(data ?? []);
+    const mapped: OrganizationMembership[] = mapMembershipRows(data);
 
     setMemberships(mapped);
 

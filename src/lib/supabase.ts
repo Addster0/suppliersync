@@ -59,17 +59,35 @@ export const supabase: SupabaseClient | null = isSupabaseConfigValid
   ? createClient(supabaseUrl!.trim(), supabaseAnonKey!.trim())
   : null;
 
-export async function checkSupabaseReachable(): Promise<boolean> {
-  if (!isSupabaseConfigValid || !supabaseUrl || !supabaseAnonKey) return false;
+export type SupabaseConnectionFailure = "network" | "invalid_key" | "server_error";
+
+export type SupabaseConnectionStatus =
+  | { ok: true }
+  | { ok: false; reason: SupabaseConnectionFailure };
+
+/** Ping Auth health; distinguish invalid keys (401/403) from network or server failures. */
+export async function checkSupabaseConnection(): Promise<SupabaseConnectionStatus> {
+  if (!isSupabaseConfigValid || !supabaseUrl || !supabaseAnonKey) {
+    return { ok: false, reason: "network" };
+  }
 
   try {
     const response = await fetch(`${supabaseUrl.trim()}/auth/v1/health`, {
       headers: { apikey: supabaseAnonKey.trim() },
     });
-    return response.ok;
+    if (response.ok) return { ok: true };
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, reason: "invalid_key" };
+    }
+    return { ok: false, reason: "server_error" };
   } catch {
-    return false;
+    return { ok: false, reason: "network" };
   }
+}
+
+export async function checkSupabaseReachable(): Promise<boolean> {
+  const status = await checkSupabaseConnection();
+  return status.ok;
 }
 
 export function formatSupabaseAuthError(error: unknown): string {

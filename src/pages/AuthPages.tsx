@@ -411,9 +411,10 @@ const CONFIG_ISSUE_COPY: Record<SupabaseConfigIssue, { title: string; body: Reac
     title: "Fix Supabase anon key",
     body: (
       <>
-        <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code> must be the anon or publishable key from Supabase
-        → Project Settings → API (legacy JWT starting with <code>eyJ</code>, or publishable key starting with{" "}
-        <code>sb_pub</code> / <code>sb_publishable_</code>).
+        <code>VITE_SUPABASE_ANON_KEY</code> must be the anon or publishable key from Supabase → Project Settings → API
+        (legacy JWT starting with <code>eyJ</code>, or publishable key starting with <code>sb_pub</code> /{" "}
+        <code>sb_publishable_</code>). On Vercel, set it for the Production environment and redeploy with cache
+        cleared so the new key is baked into the build.
       </>
     ),
   },
@@ -442,20 +443,37 @@ export function ConfigRequiredPage({ issues = ["missing"] }: { issues?: Supabase
   );
 }
 
-export function SupabaseUnreachablePage() {
+export function SupabaseUnreachablePage({ reason = "network" }: { reason?: "network" | "server_error" }) {
+  const isServerError = reason === "server_error";
+
   return (
     <div className="auth-layout auth-layout--centered">
       <div className="auth-card">
         <BrandLogo variant="auth" linkTo={null} />
         <p className="eyebrow">Connection problem</p>
-        <h1>Cannot reach Supabase</h1>
+        <h1>{isServerError ? "Supabase is unavailable" : "Cannot reach Supabase"}</h1>
         <p className="muted small">
-          The app could not connect to your Supabase project. Common causes:
+          {isServerError
+            ? "Supabase responded with a server error. This is usually temporary."
+            : "The app could not connect to your Supabase project. Common causes:"}
         </p>
         <ul className="auth-promo-list">
-          <li>Free-tier project paused after inactivity — restore it in the Supabase dashboard</li>
-          <li>Project deleted or wrong <code>VITE_SUPABASE_URL</code> in <code>.env.local</code></li>
-          <li>Dev server started before env vars were saved — restart with <code>npm run dev</code></li>
+          {isServerError ? (
+            <>
+              <li>Supabase platform incident — check status.supabase.com</li>
+              <li>Project restoring after pause — wait a minute and reload</li>
+            </>
+          ) : (
+            <>
+              <li>Free-tier project paused after inactivity — restore it in the Supabase dashboard</li>
+              <li>Project deleted or wrong <code>VITE_SUPABASE_URL</code> in env vars</li>
+              <li>
+                Production: confirm <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> are set on
+                the Vercel project (Production environment), then redeploy with cache cleared
+              </li>
+              <li>Dev: server started before env vars were saved — restart with <code>npm run dev</code></li>
+            </>
+          )}
         </ul>
         <p className="muted small">
           In Supabase → Project Settings → API, confirm the project URL resolves and copy fresh URL + anon key values.

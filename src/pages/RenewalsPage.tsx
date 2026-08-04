@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchRenewalEmailStatus, sendRenewalReminderTest, sendWeeklyDigestTest, setRenewalRemindersEnabled, setWeeklyDigestEnabled } from "../api/renewalReminders";
+import { fetchRenewalEmailStatus, sendDigestTest, sendRenewalReminderTest, setAnnualDigestEnabled, setMonthlyDigestEnabled, setRenewalRemindersEnabled } from "../api/renewalReminders";
 import type { RenewalEmailStatus } from "../api/renewalReminders";
 import { fetchUpcomingRenewals, fetchHandledRenewals, fetchVendors, setRenewalHandled } from "../api/vendors";
 import { NeedsAttentionPanel } from "../components/NeedsAttentionPanel";
@@ -9,6 +9,7 @@ import { RenewalRow, RenewalsEmptyState } from "../components/RenewalRow";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { openClinicReport } from "../lib/clinicReport";
+import { openDigestReportPreview } from "../lib/digestReport";
 import { RENEWAL_LOOKAHEAD_DAYS, RENEWAL_RECENT_EXPIRED_DAYS, urgencyLabel } from "../lib/renewals";
 import { requireSupabase } from "../lib/supabase";
 import type { RenewalItem, RenewalUrgency, Vendor } from "../types";
@@ -117,11 +118,14 @@ export function RenewalsPage() {
   const [loadingVendors, setLoadingVendors] = useState(true);
   const [error, setError] = useState("");
   const [remindersEnabled, setRemindersEnabled] = useState(org?.renewalRemindersEnabled ?? true);
-  const [digestEnabled, setDigestEnabled] = useState(org?.weeklyDigestEnabled ?? true);
+  const [monthlyDigestEnabled, setMonthlyDigestEnabledState] = useState(org?.monthlyDigestEnabled ?? true);
+  const [annualDigestEnabled, setAnnualDigestEnabledState] = useState(org?.annualDigestEnabled ?? true);
   const [savingReminders, setSavingReminders] = useState(false);
-  const [savingDigest, setSavingDigest] = useState(false);
+  const [savingMonthlyDigest, setSavingMonthlyDigest] = useState(false);
+  const [savingAnnualDigest, setSavingAnnualDigest] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
-  const [sendingDigestTest, setSendingDigestTest] = useState(false);
+  const [sendingMonthlyDigestTest, setSendingMonthlyDigestTest] = useState(false);
+  const [sendingAnnualDigestTest, setSendingAnnualDigestTest] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
   const [emailError, setEmailError] = useState("");
   const [emailStatus, setEmailStatus] = useState<RenewalEmailStatus | null>(null);
@@ -183,8 +187,9 @@ export function RenewalsPage() {
 
   useEffect(() => {
     setRemindersEnabled(org?.renewalRemindersEnabled ?? true);
-    setDigestEnabled(org?.weeklyDigestEnabled ?? true);
-  }, [org?.renewalRemindersEnabled, org?.weeklyDigestEnabled, organizationId]);
+    setMonthlyDigestEnabledState(org?.monthlyDigestEnabled ?? true);
+    setAnnualDigestEnabledState(org?.annualDigestEnabled ?? true);
+  }, [org?.renewalRemindersEnabled, org?.monthlyDigestEnabled, org?.annualDigestEnabled, organizationId]);
 
   useEffect(() => {
     if (!organizationId) {
@@ -285,45 +290,70 @@ export function RenewalsPage() {
     }
   }
 
-  async function handleToggleDigest(nextValue: boolean) {
+  async function handleToggleMonthlyDigest(nextValue: boolean) {
     if (!organizationId || !canManageReminders) return;
 
-    setSavingDigest(true);
+    setSavingMonthlyDigest(true);
     setEmailError("");
     setEmailMessage("");
 
     try {
-      await setWeeklyDigestEnabled(organizationId, nextValue);
-      setDigestEnabled(nextValue);
+      await setMonthlyDigestEnabled(organizationId, nextValue);
+      setMonthlyDigestEnabledState(nextValue);
       await refreshMemberships();
-      setEmailMessage(nextValue ? "Weekly digest enabled." : "Weekly digest turned off.");
+      setEmailMessage(nextValue ? "Monthly reports enabled." : "Monthly reports turned off.");
     } catch (err) {
-      setEmailError(err instanceof Error ? err.message : "Could not update digest settings.");
+      setEmailError(err instanceof Error ? err.message : "Could not update report settings.");
     } finally {
-      setSavingDigest(false);
+      setSavingMonthlyDigest(false);
     }
   }
 
-  async function handleSendDigestTest() {
+  async function handleToggleAnnualDigest(nextValue: boolean) {
     if (!organizationId || !canManageReminders) return;
 
-    setSendingDigestTest(true);
+    setSavingAnnualDigest(true);
     setEmailError("");
     setEmailMessage("");
 
     try {
-      const result = await sendWeeklyDigestTest(organizationId);
-      const count = result.itemCount ?? 0;
+      await setAnnualDigestEnabled(organizationId, nextValue);
+      setAnnualDigestEnabledState(nextValue);
+      await refreshMemberships();
+      setEmailMessage(nextValue ? "Annual reports enabled." : "Annual reports turned off.");
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Could not update report settings.");
+    } finally {
+      setSavingAnnualDigest(false);
+    }
+  }
+
+  async function handleSendDigestTest(periodType: "monthly" | "annual") {
+    if (!organizationId || !canManageReminders) return;
+
+    const setSending =
+      periodType === "monthly" ? setSendingMonthlyDigestTest : setSendingAnnualDigestTest;
+    setSending(true);
+    setEmailError("");
+    setEmailMessage("");
+
+    try {
+      const result = await sendDigestTest(organizationId, periodType);
       const recipient = result.recipient ?? testRecipientEmail ?? "your inbox";
-      let message = `Weekly digest test sent to ${recipient}${count ? ` with ${count} action item${count === 1 ? "" : "s"}.` : "."}`;
+      const label = periodType === "monthly" ? "Monthly report" : "Annual report";
+      let message = `${label} test sent to ${recipient}`;
+      if (result.periodLabel) {
+        message += ` (${result.periodLabel})`;
+      }
+      message += ".";
       if (result.deliveryNote) {
         message += ` ${result.deliveryNote}`;
       }
       setEmailMessage(message);
     } catch (err) {
-      setEmailError(err instanceof Error ? err.message : "Could not send digest test.");
+      setEmailError(err instanceof Error ? err.message : "Could not send report test.");
     } finally {
-      setSendingDigestTest(false);
+      setSending(false);
     }
   }
 
@@ -480,24 +510,25 @@ export function RenewalsPage() {
           <section className="card renewals-email-card">
             <div className="renewals-email-header">
               <div>
-                <p className="label">Weekly action items digest</p>
+                <p className="label">Monthly vendor report</p>
                 <p className="muted small">
-                  Every Monday, owners and admins get a summary of renewals, compliance gaps, and missing contacts.
+                  On the 1st of each month, owners and admins receive a visual report with spend trends,
+                  category breakdown, top vendors, and scorecard rankings.
                 </p>
               </div>
               {canManageReminders ? (
                 <label className="renewals-toggle-label">
                   <input
-                    checked={digestEnabled}
-                    disabled={savingDigest}
-                    onChange={(event) => void handleToggleDigest(event.target.checked)}
+                    checked={monthlyDigestEnabled}
+                    disabled={savingMonthlyDigest}
+                    onChange={(event) => void handleToggleMonthlyDigest(event.target.checked)}
                     type="checkbox"
                   />
-                  <span>{savingDigest ? "Saving…" : digestEnabled ? "On" : "Off"}</span>
+                  <span>{savingMonthlyDigest ? "Saving…" : monthlyDigestEnabled ? "On" : "Off"}</span>
                 </label>
               ) : (
-                <span className={`badge ${digestEnabled ? "active" : "expired"}`}>
-                  {digestEnabled ? "Enabled" : "Disabled"}
+                <span className={`badge ${monthlyDigestEnabled ? "active" : "expired"}`}>
+                  {monthlyDigestEnabled ? "Enabled" : "Disabled"}
                 </span>
               )}
             </div>
@@ -506,19 +537,91 @@ export function RenewalsPage() {
               <div className="renewals-email-actions">
                 <button
                   className="secondary"
-                  disabled={sendingDigestTest || !testRecipientEmail}
-                  onClick={() => void handleSendDigestTest()}
+                  disabled={sendingMonthlyDigestTest || !testRecipientEmail}
+                  onClick={() => void handleSendDigestTest("monthly")}
                   type="button"
                 >
-                  {sendingDigestTest
+                  {sendingMonthlyDigestTest
                     ? "Sending…"
                     : testRecipientEmail
-                      ? `Send weekly digest test to ${testRecipientEmail}`
-                      : "Send weekly digest test"}
+                      ? `Send monthly report test to ${testRecipientEmail}`
+                      : "Send monthly report test"}
+                </button>
+                <button
+                  className="secondary"
+                  disabled={loading || loadingVendors}
+                  onClick={() =>
+                    openDigestReportPreview({
+                      workspaceName: org?.name ?? "Workspace",
+                      vendors,
+                      periodType: "monthly",
+                    })
+                  }
+                  type="button"
+                >
+                  Preview monthly report
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className="card renewals-email-card">
+            <div className="renewals-email-header">
+              <div>
+                <p className="label">Annual vendor report</p>
+                <p className="muted small">
+                  Every January 1, owners and admins receive a year-in-review report with YoY spend trends,
+                  category mix, and vendor scorecard rankings.
+                </p>
+              </div>
+              {canManageReminders ? (
+                <label className="renewals-toggle-label">
+                  <input
+                    checked={annualDigestEnabled}
+                    disabled={savingAnnualDigest}
+                    onChange={(event) => void handleToggleAnnualDigest(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>{savingAnnualDigest ? "Saving…" : annualDigestEnabled ? "On" : "Off"}</span>
+                </label>
+              ) : (
+                <span className={`badge ${annualDigestEnabled ? "active" : "expired"}`}>
+                  {annualDigestEnabled ? "Enabled" : "Disabled"}
+                </span>
+              )}
+            </div>
+
+            {canManageReminders && (
+              <div className="renewals-email-actions">
+                <button
+                  className="secondary"
+                  disabled={sendingAnnualDigestTest || !testRecipientEmail}
+                  onClick={() => void handleSendDigestTest("annual")}
+                  type="button"
+                >
+                  {sendingAnnualDigestTest
+                    ? "Sending…"
+                    : testRecipientEmail
+                      ? `Send annual report test to ${testRecipientEmail}`
+                      : "Send annual report test"}
+                </button>
+                <button
+                  className="secondary"
+                  disabled={loading || loadingVendors}
+                  onClick={() =>
+                    openDigestReportPreview({
+                      workspaceName: org?.name ?? "Workspace",
+                      vendors,
+                      periodType: "annual",
+                    })
+                  }
+                  type="button"
+                >
+                  Preview annual report
                 </button>
                 <p className="muted small renewals-email-note">
-                  Uses the same action items as the panel above. Schedule the edge function with{" "}
-                  <code>mode: weekly_cron</code> (see RENEWAL_EMAIL_SETUP.md).
+                  Schedule the edge function with <code>mode: monthly_cron</code> and{" "}
+                  <code>mode: annual_cron</code> (see RENEWAL_EMAIL_SETUP.md).
                 </p>
               </div>
             )}

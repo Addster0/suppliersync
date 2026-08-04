@@ -31,18 +31,30 @@ export async function setRenewalRemindersEnabled(organizationId: string, enabled
   if (error) throw new Error(error.message);
 }
 
-export async function setWeeklyDigestEnabled(organizationId: string, enabled: boolean) {
+export async function setMonthlyDigestEnabled(organizationId: string, enabled: boolean) {
   const { error } = await requireSupabase()
     .from("organizations")
-    .update({ weekly_digest_enabled: enabled })
+    .update({ monthly_digest_enabled: enabled })
     .eq("id", organizationId);
 
   if (error) throw new Error(error.message);
 }
 
-export async function sendWeeklyDigestTest(organizationId: string) {
+export async function setAnnualDigestEnabled(organizationId: string, enabled: boolean) {
+  const { error } = await requireSupabase()
+    .from("organizations")
+    .update({ annual_digest_enabled: enabled })
+    .eq("id", organizationId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function sendDigestTest(organizationId: string, periodType: "monthly" | "annual") {
   const { data, error } = await requireSupabase().functions.invoke("send-renewal-reminders", {
-    body: { organizationId, mode: "test_weekly_digest" },
+    body: {
+      organizationId,
+      mode: periodType === "monthly" ? "test_monthly_digest" : "test_annual_digest",
+    },
   });
 
   if (error) throw new Error(error.message);
@@ -51,7 +63,8 @@ export async function sendWeeklyDigestTest(organizationId: string) {
     error?: string;
     sent?: boolean;
     recipient?: string;
-    itemCount?: number;
+    periodLabel?: string;
+    vendorCount?: number;
     usingSandboxSender?: boolean;
     appUrl?: string;
     resendEmailId?: string | null;

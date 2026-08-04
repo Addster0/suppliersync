@@ -1,5 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  buildDigestReportData,
+  buildDigestReportHtml,
+  digestPeriodForType,
+  shouldRunScheduledDigest,
+  type DigestPeriodType,
+} from "./digestReport.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -630,221 +637,50 @@ Deno.serve(async (req) => {
       });
     }
 
-    type DigestSeverity = "critical" | "warning" | "info";
-
-    type DigestItem = {
-      severity: DigestSeverity;
-      title: string;
-      detail: string;
-    };
-
-    const COMPLIANCE_LABELS: Record<string, string> = {
-      coi: "Certificate of insurance (COI)",
-      w9: "W-9 / tax form",
-      license: "Business license",
-      general: "General document",
-    };
-
-    function digestWeekMonday(date: Date) {
-      const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      const day = d.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      d.setDate(d.getDate() + diff);
-      return formatDateForQuery(d);
-    }
-
-    function renewalUrgency(days: number): "overdue" | "soon" | "upcoming" | null {
-      if (days < 0) return "overdue";
-      if (days <= 30) return "soon";
-      if (days <= 90) return "upcoming";
-      return null;
-    }
-
-    async function fetchDigestItems(
+    async function fetchDigestReportForOrg(
       admin: ReturnType<typeof createClient>,
-      organizationId: string
-    ): Promise<DigestItem[]> {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const rangeStart = new Date(today);
-      rangeStart.setDate(rangeStart.getDate() - 30);
-      const rangeEnd = new Date(today);
-      rangeEnd.setDate(rangeEnd.getDate() + 90);
-
-      const startIso = formatDateForQuery(rangeStart);
-      const endIso = formatDateForQuery(rangeEnd);
-
-      const { data: contracts, error: contractsError } = await admin
-        .from("contracts")
-        .select(CONTRACT_SELECT)
-        .eq("organization_id", organizationId)
-        .is("renewal_handled_at", null)
-        .or(
-          `and(end_date.gte.${startIso},end_date.lte.${endIso}),and(renewal_date.gte.${startIso},renewal_date.lte.${endIso})`
-        );
-
-      if (contractsError) throw new Error(contractsError.message);
-
-      const items: DigestItem[] = [];
-      const listedContractIds = new Set<string>();
-
-      for (const row of contracts ?? []) {
-        const contractRow = row as ContractRow;
-        const vendorName = vendorNameFromRow(contractRow.vendors);
-        if (!vendorName) continue;
-        const actionDate = getContractActionDate(contractRow);
-        if (!actionDate || actionDate < startIso || actionDate > endIso) continue;
-        const days = daysUntilEnd(actionDate);
-        const urgency = renewalUrgency(days);
-        if (urgency === "overdue" || urgency === "soon") {
-          listedContractIds.add(contractRow.id);
-          items.push({
-            severity: urgency === "overdue" ? "critical" : "warning",
-            title: urgency === "overdue" ? "Contract overdue" : "Renewal due soon",
-            detail: `${contractRow.title} · ${vendorName} · ${actionDate}`,
-          });
-        }
-      }
-
+      organizationId: string,
+      orgName: string,
+      periodType: DigestPeriodType
+    ) {
       const { data: vendors, error: vendorsError } = await admin
         .from("vendors")
-        .select(
-          `
-          id,
-          name,
-          status,
-          contacts ( id ),
-          documents ( id, doc_type, expires_at ),
-          contracts ( id, title, end_date, renewal_date, renewal_type, notice_period_days )
-        `
-        )
+        .select("id, name, category")
         .eq("organization_id", organizationId);
 
       if (vendorsError) throw new Error(vendorsError.message);
 
-      for (const vendor of vendors ?? []) {
-        if (vendor.status === "active" && (vendor.contacts ?? []).length === 0) {
-          items.push({
-            severity: "warning",
-            title: "No contact on file",
-            detail: `${vendor.name} — add a phone or email before you need them.`,
-          });
-        }
+      const vendorIds = (vendors ?? []).map((row) => row.id);
 
-        if (vendor.status !== "active") continue;
+      const { data: spendRows, error: spendError } =
+        vendorIds.length > 0
+          ? await admin
+              .from("vendor_spend_snapshots")
+              .select("entry_date, amount, entry_type, vendor_id")
+              .eq("organization_id", organizationId)
+              .in("vendor_id", vendorIds)
+          : { data: [], error: null };
 
-        const docTypes = new Set(
-          (vendor.documents ?? []).map((doc: { doc_type: string }) => doc.doc_type)
-        );
-        for (const docType of ["coi", "w9"]) {
-          if (!docTypes.has(docType)) {
-            items.push({
-              severity: "info",
-              title: `Missing ${COMPLIANCE_LABELS[docType] ?? docType}`,
-              detail: `${vendor.name} — upload to Documents for compliance tracking.`,
-            });
-          }
-        }
+      if (spendError) throw new Error(spendError.message);
 
-        for (const doc of vendor.documents ?? []) {
-          if (!doc.expires_at || doc.doc_type === "general") continue;
-          const expiry = new Date(`${doc.expires_at}T00:00:00`);
-          if (expiry < today) {
-            items.push({
-              severity: "critical",
-              title: "Compliance document expired",
-              detail: `${vendor.name} · ${COMPLIANCE_LABELS[doc.doc_type] ?? doc.doc_type} expired ${doc.expires_at}`,
-            });
-          }
-        }
+      const { data: evaluationRows, error: evaluationError } =
+        vendorIds.length > 0
+          ? await admin
+              .from("vendor_evaluations")
+              .select("vendor_id, eval_date, score, criteria")
+              .eq("organization_id", organizationId)
+              .in("vendor_id", vendorIds)
+          : { data: [], error: null };
 
-        for (const contract of vendor.contracts ?? []) {
-          const contractRow = contract as Pick<
-            ContractRow,
-            "id" | "title" | "end_date" | "renewal_date" | "renewal_type" | "notice_period_days"
-          >;
-          const actionDate = getContractActionDate(contractRow);
-          if (!actionDate || listedContractIds.has(contractRow.id)) continue;
-          const days = daysUntilEnd(actionDate);
-          const urgency = renewalUrgency(days);
-          if (urgency === "upcoming" && days <= 60) {
-            items.push({
-              severity: "info",
-              title: "Upcoming contract review",
-              detail: `${contractRow.title} · ${vendor.name} · ${actionDate}`,
-            });
-          }
-        }
-      }
+      if (evaluationError) throw new Error(evaluationError.message);
 
-      const severityOrder: Record<DigestSeverity, number> = {
-        critical: 0,
-        warning: 1,
-        info: 2,
-      };
-
-      return items.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
-    }
-
-    function buildDigestEmailHtml(params: {
-      orgName: string;
-      items: DigestItem[];
-      appUrl: string;
-      isTest: boolean;
-    }) {
-      const { orgName, items, appUrl, isTest } = params;
-      const renewalsUrl = `${appUrl.replace(/\/$/, "")}/app/renewals#needs-attention`;
-      const testBanner = isTest
-        ? `<p style="margin:0 0 16px;padding:12px 14px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:14px;">
-            This is a test email — your weekly digest uses the same format.
-          </p>`
-        : "";
-
-      const rows = items
-        .slice(0, 20)
-        .map((item) => {
-          const color =
-            item.severity === "critical" ? "#b91c1c" : item.severity === "warning" ? "#b45309" : "#1d4ed8";
-          return `<tr>
-            <td style="padding:12px 0;border-bottom:1px solid #e2e8f0;">
-              <span style="display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;color:${color};">${escapeHtml(item.severity)}</span><br>
-              <strong style="color:#172033;">${escapeHtml(item.title)}</strong><br>
-              <span style="color:#64748b;font-size:14px;">${escapeHtml(item.detail)}</span>
-            </td>
-          </tr>`;
-        })
-        .join("");
-
-      const overflow =
-        items.length > 20
-          ? `<p style="margin:12px 0 0;color:#64748b;font-size:14px;">…and ${items.length - 20} more items in the app.</p>`
-          : "";
-
-      return `<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background:#eef2f7;font-family:Inter,Segoe UI,sans-serif;">
-  <div style="max-width:560px;margin:24px auto;padding:24px;background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">SupplierSync</p>
-    <h1 style="margin:0 0 12px;font-size:22px;color:#172033;">Weekly action items — ${escapeHtml(orgName)}</h1>
-    ${testBanner}
-    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.5;">
-      ${items.length} item${items.length === 1 ? "" : "s"} need attention this week — renewals, compliance gaps, and missing contacts.
-    </p>
-    <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-    ${overflow}
-    <p style="margin:24px 0 0;">
-      <a href="${renewalsUrl}" style="display:inline-block;padding:12px 18px;background:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
-        Open action items
-      </a>
-    </p>
-    <p style="margin:20px 0 0;color:#94a3b8;font-size:12px;line-height:1.5;">
-      Sent every Monday to workspace owners and admins when weekly digest is enabled.
-    </p>
-  </div>
-</body>
-</html>`;
+      return buildDigestReportData({
+        orgName,
+        periodType,
+        vendors: vendors ?? [],
+        spendEntries: spendRows ?? [],
+        evaluations: evaluationRows ?? [],
+      });
     }
 
     async function authorizeOrgAdmin(
@@ -897,8 +733,12 @@ Deno.serve(async (req) => {
       return { user };
     }
 
-    if (mode === "test_weekly_digest") {
-      const organizationId = body.organizationId as string | undefined;
+    async function sendDigestTest(
+      admin: ReturnType<typeof createClient>,
+      req: Request,
+      organizationId: string | undefined,
+      periodType: DigestPeriodType
+    ) {
       const auth = await authorizeOrgAdmin(admin, req, organizationId);
       if (auth.error) return auth.error;
       const user = auth.user!;
@@ -919,19 +759,19 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Could not find your email address." }, 400);
       }
 
-      const items = await fetchDigestItems(admin, organizationId!);
-      const html = buildDigestEmailHtml({
-        orgName: org.name,
-        items,
+      const reportData = await fetchDigestReportForOrg(admin, organizationId!, org.name, periodType);
+      const html = buildDigestReportHtml({
+        data: reportData,
         appUrl,
         isTest: true,
       });
 
+      const label = periodType === "monthly" ? "monthly report" : "annual report";
       const sendResult = await sendEmail({
         resendKey,
         fromEmail,
         to: [recipientEmail],
-        subject: `[Test] SupplierSync weekly digest — ${org.name}`,
+        subject: `[Test] SupplierSync ${label} — ${org.name}`,
         html,
         replyTo: recipientEmail,
       });
@@ -939,7 +779,9 @@ Deno.serve(async (req) => {
       return jsonResponse({
         sent: true,
         recipient: recipientEmail,
-        itemCount: items.length,
+        periodType,
+        periodLabel: reportData.periodLabel,
+        vendorCount: reportData.vendorCount,
         usingSandboxSender: isSandboxSender(fromEmail),
         appUrl,
         resendEmailId: sendResult.id,
@@ -947,79 +789,112 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (mode === "weekly_cron") {
+    if (mode === "test_monthly_digest") {
+      return await sendDigestTest(admin, req, body.organizationId as string | undefined, "monthly");
+    }
+
+    if (mode === "test_annual_digest") {
+      return await sendDigestTest(admin, req, body.organizationId as string | undefined, "annual");
+    }
+
+    async function runDigestCron(periodType: DigestPeriodType) {
       const providedSecret = req.headers.get("x-cron-secret");
       if (!cronSecret || providedSecret !== cronSecret) {
         return jsonResponse({ error: "Invalid cron secret." }, 401);
       }
 
-      const digestWeek = digestWeekMonday(new Date());
+      if (!shouldRunScheduledDigest(periodType)) {
+        return jsonResponse({
+          sent: false,
+          skipped: true,
+          reason: `Not scheduled for ${periodType} digest today.`,
+        });
+      }
+
+      const enabledColumn =
+        periodType === "monthly" ? "monthly_digest_enabled" : "annual_digest_enabled";
+
       const { data: orgs, error: orgsError } = await admin
         .from("organizations")
         .select("id, name")
-        .eq("weekly_digest_enabled", true);
+        .eq(enabledColumn, true);
 
       if (orgsError) {
         return jsonResponse({ error: orgsError.message }, 500);
       }
 
+      const digestPeriod = digestPeriodForType(periodType).digestPeriod;
       let emailsSent = 0;
-      let itemsNotified = 0;
 
       for (const org of orgs ?? []) {
         const { data: existingLog, error: logLookupError } = await admin
           .from("workspace_digest_log")
           .select("id")
           .eq("organization_id", org.id)
-          .eq("digest_week", digestWeek)
+          .eq("digest_type", periodType)
+          .eq("digest_period", digestPeriod)
           .maybeSingle();
 
         if (logLookupError) throw new Error(logLookupError.message);
         if (existingLog) continue;
 
-        const items = await fetchDigestItems(admin, org.id);
-        if (items.length === 0) continue;
+        const reportData = await fetchDigestReportForOrg(admin, org.id, org.name, periodType);
+        if (!reportData.hasData) continue;
 
         const recipients = await getAdminEmails(admin, org.id);
         if (recipients.length === 0) continue;
 
-        const html = buildDigestEmailHtml({
-          orgName: org.name,
-          items,
+        const html = buildDigestReportHtml({
+          data: reportData,
           appUrl,
           isTest: false,
         });
 
+        const label = periodType === "monthly" ? "monthly report" : "annual report";
         await sendEmail({
           resendKey,
           fromEmail,
           to: recipients,
-          subject: `SupplierSync weekly digest — ${org.name}`,
+          subject: `SupplierSync ${label} — ${org.name}`,
           html,
           replyTo: recipients[0],
         });
 
         const { error: logError } = await admin.from("workspace_digest_log").insert({
           organization_id: org.id,
-          digest_week: digestWeek,
+          digest_type: periodType,
+          digest_period: digestPeriod,
         });
         if (logError) {
-          console.error("Failed to log weekly digest", org.id, logError.message);
+          console.error(`Failed to log ${periodType} digest`, org.id, logError.message);
         }
 
         emailsSent += 1;
-        itemsNotified += items.length;
       }
 
       return jsonResponse({
         sent: true,
         organizationsEmailed: emailsSent,
-        itemsNotified,
-        digestWeek,
+        digestType: periodType,
+        digestPeriod,
       });
     }
 
-    return jsonResponse({ error: "Unknown mode. Use test, cron, test_weekly_digest, or weekly_cron." }, 400);
+    if (mode === "monthly_cron") {
+      return await runDigestCron("monthly");
+    }
+
+    if (mode === "annual_cron") {
+      return await runDigestCron("annual");
+    }
+
+    return jsonResponse(
+      {
+        error:
+          "Unknown mode. Use test, cron, test_monthly_digest, test_annual_digest, monthly_cron, or annual_cron.",
+      },
+      400
+    );
   } catch (error) {
     console.error(error);
     return jsonResponse(
