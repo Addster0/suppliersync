@@ -190,7 +190,7 @@ export function tableFromCsvText(text: string): SpreadsheetTable {
 }
 
 async function loadXlsx() {
-  return import("xlsx");
+  return import("@e965/xlsx");
 }
 
 export async function tableFromExcelBuffer(buffer: ArrayBuffer, sheetIndex = 0): Promise<SpreadsheetTable> {

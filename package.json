@@ -9,14 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.107.0",
+    "@e965/xlsx": "^0.20.3",
+    "@supabase/supabase-js": "^2.112.0",
     "@vitejs/plugin-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-router-dom": "^7.16.0",
+    "react-router-dom": "^7.18.2",
     "typescript": "latest",
-    "vite": "latest",
-    "xlsx": "^0.18.5"
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/react": "^19.2.16",
