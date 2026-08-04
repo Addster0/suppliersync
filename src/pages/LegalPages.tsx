@@ -3,6 +3,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import { LegalFooter } from "../components/LegalFooter";
 import {
   LEGAL_LAST_UPDATED,
+  PRIVACY_LAST_UPDATED,
   PRIVACY_SECTIONS,
   TERMS_SECTIONS,
   TERMS_VERSION,
@@ -12,10 +13,12 @@ function LegalDocument({
   title,
   intro,
   sections,
+  lastUpdated = LEGAL_LAST_UPDATED,
 }: {
   title: string;
   intro: string;
   sections: typeof TERMS_SECTIONS;
+  lastUpdated?: string;
 }) {
   return (
     <div className="legal-page">
@@ -30,7 +33,8 @@ function LegalDocument({
         <p className="eyebrow">Legal</p>
         <h1>{title}</h1>
         <p className="muted small legal-page-meta">
-          Last updated {LEGAL_LAST_UPDATED} · Version {TERMS_VERSION}
+          Last updated {lastUpdated}
+          {title === "Terms of Service" ? ` · Version ${TERMS_VERSION}` : ""}
         </p>
         <p className="legal-page-intro">{intro}</p>
 
@@ -72,6 +76,7 @@ export function PrivacyPage() {
   return (
     <LegalDocument
       intro="This Privacy Policy describes how SupplierSync handles information when clinics and their staff use the Service."
+      lastUpdated={PRIVACY_LAST_UPDATED}
       sections={PRIVACY_SECTIONS}
       title="Privacy Policy"
     />

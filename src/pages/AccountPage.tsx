@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { deleteAccount, deleteOrganization } from "../api/account";
+import { downloadOrganizationExport, exportOrganizationData } from "../api/export";
 import { fetchIsPlatformAdmin } from "../api/foundingApplication";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
@@ -33,6 +34,7 @@ export function AccountPage() {
   const [deleteAccountConfirm, setDeleteAccountConfirm] = useState("");
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     void fetchIsPlatformAdmin().then(setIsPlatformAdmin);
@@ -109,6 +111,24 @@ export function AccountPage() {
   const isOwner = activeMembership?.role === "owner";
   const orgName = org?.name ?? "";
   const orgDeletePhrase = orgName ? `delete ${orgName}` : "";
+
+  async function handleExportWorkspace() {
+    if (!org || !isOwner) return;
+
+    setExporting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const data = await exportOrganizationData(org.id);
+      downloadOrganizationExport(data);
+      setMessage(`Exported ${data.vendors.length} vendor record${data.vendors.length === 1 ? "" : "s"} as JSON.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not export workspace data.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleDeleteWorkspace() {
     if (!org || !isOwner) return;
@@ -284,6 +304,24 @@ export function AccountPage() {
               </p>
               <LegalFooter />
             </article>
+
+            {isOwner && org && (
+              <article className="card account-data-section">
+                <p className="label">Your data</p>
+                <p className="muted small">
+                  Download a JSON copy of vendor records, contacts, contract and document metadata, spend entries,
+                  and evaluations. Uploaded PDF files are not included — only file names and sizes.
+                </p>
+                <button
+                  type="button"
+                  className="secondary account-export-button"
+                  onClick={() => void handleExportWorkspace()}
+                  disabled={exporting || deletingOrg || deletingAccount}
+                >
+                  {exporting ? "Preparing export…" : "Export workspace data"}
+                </button>
+              </article>
+            )}
 
             <article className="card account-danger-zone">
               <p className="label">Danger zone</p>

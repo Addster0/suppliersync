@@ -1,5 +1,6 @@
 import { DragEvent, FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { acknowledgeAiDisclosureIfNeeded } from "./lib/aiDisclosure";
 import {
   extractContractFromPdf,
   fetchContractExtractStatus,
@@ -1354,6 +1355,8 @@ function ContractsSection({
       return;
     }
 
+    if (!acknowledgeAiDisclosureIfNeeded()) return;
+
     const requestId = (extractRequestIdRef.current[vendor.id] ?? 0) + 1;
     extractRequestIdRef.current[vendor.id] = requestId;
     patchDraft({ extracting: true, extractError: "", extractNotice: "" });
@@ -2107,6 +2110,10 @@ function DocumentsSection({
         let fileExpiresAt = expiresAt || undefined;
 
         if (isPdfFile(file)) {
+          if (!acknowledgeAiDisclosureIfNeeded()) {
+            setExtracting(false);
+            continue;
+          }
           setExtracting(true);
           try {
             const result = await extractDocumentFromPdf(organizationId, file);
@@ -2228,6 +2235,8 @@ function DocumentsSection({
       setExtractError("Only PDF files can be read by AI.");
       return;
     }
+
+    if (!acknowledgeAiDisclosureIfNeeded()) return;
 
     setReadingDocId(document.id);
     setExtractError("");

@@ -30,7 +30,7 @@ This document describes **current behavior**, not aspirational policy. Update it
 - **`auth.users`** — email, password hash, `raw_user_meta_data` (full name, terms acceptance timestamps).
 - **`profiles`** — email (synced from auth), full_name, terms_accepted_at/version, renewal_notification_email.
 - **`organization_members`** — links users to workspaces; CASCADE when profile or org deleted.
-- **`organizations`** — clinic name, plan, Stripe IDs, digest/reminder toggles. **No DELETE RLS policy** — workspaces cannot be deleted from the app.
+- **`organizations`** — clinic name, plan, Stripe IDs, digest/reminder toggles. Deleted via owner self-service (Account → Delete workspace) or sole-owner account deletion.
 
 ### Clinic data (tenant-scoped, RLS by org membership)
 
@@ -140,14 +140,15 @@ Use Supabase [pg_cron](https://supabase.com/docs/guides/database/extensions/pg_c
 
 Public promises (`src/lib/legal.ts`):
 
-- **Retention (§6):** Active while workspace is active; delete/anonymize on request within reasonable period.
-- **Your choices (§7):** Profile update in app; export/deletion via contact email.
-
-Gaps to close for GDPR/CCPA readiness: self-service delete, data export, documented subprocessors list (OpenAI, Resend, Stripe, Supabase), and retention schedule reflected in privacy policy once automated purges exist.
+- **Retention (§8):** Active while workspace is active; short-lived operational logs; delete on self-service account/workspace deletion.
+- **Your choices (§9):** Profile update in app; workspace export (JSON) and self-service delete for owners; account deletion for users.
+- **Subprocessors (§5):** Supabase, Stripe, Resend, OpenAI, Vercel — see [COMPLIANCE.md](./COMPLIANCE.md) for DPA checklist.
 
 ---
 
 ## Related docs
+
+- [COMPLIANCE.md](./COMPLIANCE.md) — subprocessors, HIPAA positioning, GDPR/CCPA rights
 
 - [ABUSE_PREVENTION.md](./ABUSE_PREVENTION.md) — `api_usage_log` 7-day purge note
 - [PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md)

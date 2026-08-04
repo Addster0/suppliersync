@@ -1,5 +1,6 @@
-export const TERMS_VERSION = "2026-08-03";
-export const LEGAL_LAST_UPDATED = "August 3, 2026";
+export const TERMS_VERSION = "2026-08-04";
+export const LEGAL_LAST_UPDATED = "August 4, 2026";
+export const PRIVACY_LAST_UPDATED = "August 4, 2026";
 export const LEGAL_CONTACT_EMAIL = "legal@suppliersync.org";
 
 export function hasAcceptedCurrentTerms(status: {
@@ -36,6 +37,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     paragraphs: [
       'You retain ownership of the information you upload or enter into your workspace, including vendor names, contacts, contracts, documents, and notes ("Clinic Data").',
       "You grant us a limited license to host, process, back up, and display Clinic Data solely to provide and improve the Service. We do not sell Clinic Data.",
+      "Optional AI features (such as contract and document scanning) send PDF content to our AI subprocessors to extract fields. We do not use Clinic Data to train third-party models for our account.",
       "Each clinic workspace is logically separated. You control who can access your workspace through your account and (when available) team invitations.",
     ],
   },
@@ -137,44 +139,70 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "4. How we share information",
     paragraphs: [
-      "We share information only with service providers that help us run the Service (for example, hosting, authentication, email delivery, and payments), under contracts that require appropriate protection.",
+      "We share information only with service providers that help us run the Service, under contracts that require appropriate protection.",
       "We may disclose information if required by law or to protect rights, safety, and security.",
       "We do not sell personal information or Clinic Data.",
     ],
   },
   {
-    title: "5. Data storage & security",
+    title: "5. Subprocessors",
+    paragraphs: [
+      "We use the following subprocessors to operate the Service. Each is bound by data protection terms appropriate to their role:",
+    ],
+    bullets: [
+      "Supabase — database, authentication, and file storage.",
+      "Stripe — subscription billing and payment processing.",
+      "Resend — transactional email (for example, renewal reminders you enable).",
+      "OpenAI — AI document extraction; PDF content is sent for contract and document scanning features.",
+      "Vercel — frontend application hosting.",
+    ],
+  },
+  {
+    title: "6. AI processing & health information",
+    paragraphs: [
+      "When you use AI scan features, PDF files are transmitted to OpenAI to extract contract dates, amounts, document types, and similar fields. We do not store PDF content in our database for that processing; extraction results are saved as structured fields you choose to keep.",
+      "Do not upload protected health information (PHI) or other regulated data unless your clinic has determined that use is appropriate and any required agreements are in place.",
+      "SupplierSync is not HIPAA-certified. Clinics remain responsible for what they upload and for compliance with applicable laws. Contact us at legal@suppliersync.org for Business Associate Agreement (BAA) inquiries before relying on the Service for PHI.",
+    ],
+  },
+  {
+    title: "7. Data storage & security",
     paragraphs: [
       "Clinic Data is stored in secure cloud infrastructure with access controls. Connections to the Service use encryption in transit.",
       "You choose what to upload. Do not upload information you are not authorized to store in a third-party operations tool.",
     ],
   },
   {
-    title: "6. Retention",
+    title: "8. Retention",
     paragraphs: [
-      "We retain account and Clinic Data while your workspace is active. If you request deletion or close an account, we will delete or anonymize data within a reasonable period, subject to backups and legal retention requirements.",
+      "We retain account and Clinic Data while your workspace is active.",
+      "Operational logs (for example, API usage records used for abuse prevention) are retained for a short period, typically seven days, then purged automatically.",
+      "When you delete your account or workspace through Account settings, we remove data from active systems within a reasonable period. Encrypted backups may retain deleted data briefly before rotation, consistent with our infrastructure provider's backup schedule.",
+      "For a detailed retention reference, see our internal data retention documentation (summarized in the Privacy Policy and available on request).",
     ],
   },
   {
-    title: "7. Your choices",
+    title: "9. Your choices",
     paragraphs: [
       "You may access and update profile information in the app. Workspace owners control clinic records inside their workspace.",
+      "Workspace owners may export workspace data (vendor records, contacts, contract and document metadata, spend, and evaluations) as JSON from Account settings.",
+      "You may delete your entire account or an owned workspace from Account settings. Deletion removes data from active systems; backups may retain copies briefly as described above.",
       "You may opt out of non-essential emails where the product provides controls (for example, report email settings).",
-      "Contact us to request export or deletion assistance for your account.",
+      "Contact us at legal@suppliersync.org for additional export or deletion assistance.",
     ],
   },
   {
-    title: "8. Children's privacy",
+    title: "10. Children's privacy",
     paragraphs: ["The Service is for business use by clinics and is not directed to children under 16."],
   },
   {
-    title: "9. Changes",
+    title: "11. Changes",
     paragraphs: [
       "We may update this Privacy Policy from time to time. We will post the revised policy with an updated date. Continued use after changes become effective means you accept the updated policy.",
     ],
   },
   {
-    title: "10. Contact",
+    title: "12. Contact",
     paragraphs: [`Privacy questions: ${LEGAL_CONTACT_EMAIL}.`],
   },
 ];
