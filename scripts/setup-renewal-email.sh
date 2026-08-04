@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_URL="${APP_URL:-https://vendor-prototype.vercel.app}"
+APP_URL="${APP_URL:-https://suppliersync.org}"
 FROM_EMAIL="${RENEWAL_FROM_EMAIL:-SupplierSync <onboarding@resend.dev>}"
 
 echo "SupplierSync renewal email setup"

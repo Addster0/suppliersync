@@ -17,13 +17,22 @@ export type FileAttachment = {
   mimeType: string;
 };
 
+export type ContractRenewalType = "fixed_term" | "auto_renew" | "month_to_month" | "evergreen";
+
 export type Contract = {
   id: string;
   name: string;
   startDate: string;
-  endDate: string;
+  endDate: string | null;
+  renewalDate: string | null;
+  renewalType: ContractRenewalType;
+  noticePeriodDays: number | null;
+  termMonths: number | null;
   value: number;
   status: Status;
+  createdAt?: string;
+  renewalHandledAt?: string | null;
+  renewalHandledNote?: string | null;
   file?: FileAttachment;
 };
 
@@ -89,11 +98,19 @@ export type Vendor = {
   experiments: Experiment[];
 };
 
+export type Profile = {
+  id: string;
+  email: string;
+  fullName: string;
+  renewalNotificationEmail: string | null;
+};
+
 export type Organization = {
   id: string;
   name: string;
   plan: string;
   subscriptionStatus: string;
+  trialEndsAt: string | null;
   isFounding: boolean;
   lockedMonthlyPriceCents: number | null;
   foundingEnrolledAt: string | null;
@@ -115,11 +132,18 @@ export type RenewalItem = {
   contractName: string;
   vendorId: string;
   vendorName: string;
+  /** Date used for urgency sorting and reminders (review or renewal). */
+  actionDate: string;
+  dateLabel: string;
+  renewalType: ContractRenewalType;
+  /** @deprecated use actionDate — kept for reports that reference end date */
   endDate: string;
   value: number;
   status: Status;
   daysUntilEnd: number;
   urgency: RenewalUrgency;
+  renewalHandledAt?: string | null;
+  renewalHandledNote?: string | null;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
@@ -151,3 +175,59 @@ export type DirectoryListing = {
   contactEmail?: string;
   contactPhone?: string;
 };
+
+export type OutreachStage =
+  | "research"
+  | "contacted"
+  | "replied"
+  | "trial"
+  | "founding"
+  | "converted"
+  | "not_interested"
+  | "nurture";
+
+export type OutreachFit = "high" | "medium" | "low";
+
+export type OutreachSource = "npi" | "google" | "referral" | "linkedin" | "conference" | "other";
+
+export type OutreachActivityType = "email" | "linkedin" | "call" | "meeting" | "note";
+
+export type OutreachLead = {
+  id: string;
+  clinicName: string;
+  contactName: string;
+  role: string;
+  email: string;
+  phone: string;
+  linkedinUrl: string;
+  city: string;
+  specialty: string;
+  source: OutreachSource;
+  fit: OutreachFit;
+  tags: string[];
+  stage: OutreachStage;
+  notes: string;
+  nextActionDate: string | null;
+  nextActionNote: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OutreachActivity = {
+  id: string;
+  leadId: string;
+  activityType: OutreachActivityType;
+  summary: string;
+  occurredAt: string;
+  createdAt: string;
+};
+
+export type OutreachWeeklyStats = {
+  researchAdded: number;
+  emailsSent: number;
+  linkedinSent: number;
+  callsAndMeetings: number;
+  totalActivities: number;
+};
+
+export type OutreachPipelineSummary = Record<OutreachStage, number>;

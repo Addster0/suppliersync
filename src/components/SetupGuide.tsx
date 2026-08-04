@@ -3,15 +3,17 @@ import { Link } from "react-router-dom";
 import {
   addContact,
   addContract,
-  addDocument,
   createVendor,
+  deleteSampleVendors,
   seedSampleVendors,
-  uploadOrgFile,
+  uploadAndAddDocument,
 } from "../api/vendors";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetup } from "../contexts/SetupContext";
 import { openClinicReport } from "../lib/clinicReport";
+import { CONTRACT_END_HINT, CONTRACT_END_LABEL } from "../lib/renewals";
 import type { SetupStepId } from "../lib/onboarding";
+import { countSampleVendors } from "../lib/sampleVendors";
 import type { VendorTemplate } from "../lib/vendorTemplates";
 import { formatFileSize, MAX_FILE_BYTES } from "../lib/utils";
 import { VendorImportPanel } from "./VendorImportPanel";
@@ -48,6 +50,7 @@ export function SetupGuide() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [removingSamples, setRemovingSamples] = useState(false);
   const [vendorName, setVendorName] = useState("");
   const [vendorCategory, setVendorCategory] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
@@ -63,6 +66,8 @@ export function SetupGuide() {
     () => steps.find((step) => step.id === activeStepId) ?? steps[0],
     [steps, activeStepId]
   );
+
+  const sampleVendorCount = countSampleVendors(vendors);
 
   if (!setupOpen || !canWrite) return null;
 
@@ -116,10 +121,15 @@ export function SetupGuide() {
         name,
         startDate: todayIsoDate(),
         endDate,
+        renewalDate: null,
+        renewalType: "fixed_term",
+        noticePeriodDays: null,
+        termMonths: null,
         value,
         status: "active",
       });
       await refreshSetup();
+      window.dispatchEvent(new CustomEvent("suppliersync:vendors-changed"));
       event.currentTarget.reset();
       setActiveStepId("contact");
     } catch (err) {
@@ -179,12 +189,7 @@ export function SetupGuide() {
     setBusy(true);
     setError("");
     try {
-      const uploaded = await uploadOrgFile(organizationId, vendorId, file);
-      await addDocument(organizationId, vendorId, {
-        fileName: file.name,
-        fileSize: file.size,
-        createdAt: todayIsoDate(),
-        fileUrl: uploaded.fileUrl,
+      await uploadAndAddDocument(organizationId, vendorId, file, {
         docType: String(form.get("docType") || "general") as "general" | "coi" | "w9" | "license",
       });
       await refreshSetup();
@@ -211,6 +216,31 @@ export function SetupGuide() {
     }
   }
 
+  async function handleRemoveSamples() {
+    if (!organizationId) return;
+    const confirmed = window.confirm(
+      `Remove ${sampleVendorCount} sample vendor${sampleVendorCount === 1 ? "" : "s"} (e.g. Northstar, Brightline)? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setRemovingSamples(true);
+    setError("");
+    try {
+      const removed = await deleteSampleVendors(organizationId);
+      await refreshSetup();
+      window.dispatchEvent(new CustomEvent("suppliersync:vendors-changed"));
+      if (removed === 0) {
+        setError("No sample vendors found to remove.");
+      } else if (vendors.length - removed <= 0) {
+        setActiveStepId("vendors");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove sample vendors.");
+    } finally {
+      setRemovingSamples(false);
+    }
+  }
+
   function handleSkipDocument() {
     skipDocumentStep();
     setActiveStepId("document");
@@ -223,7 +253,7 @@ export function SetupGuide() {
           <div>
             <p className="eyebrow">Workspace setup</p>
             <h2 id="setup-title">
-              {isComplete ? "You're all set" : `Get ${workspaceName} demo-ready`}
+              {isComplete ? "You're all set" : "Set up your clinic"}
             </h2>
             <p className="muted">
               {isComplete
@@ -339,7 +369,23 @@ export function SetupGuide() {
                 <button className="secondary" disabled={seeding} onClick={() => void handleLoadSample()} type="button">
                   {seeding ? "Loading…" : "Explore with sample vendors"}
                 </button>
+                {sampleVendorCount > 0 && (
+                  <button
+                    className="delete"
+                    disabled={removingSamples}
+                    onClick={() => void handleRemoveSamples()}
+                    type="button"
+                  >
+                    {removingSamples ? "Removing…" : `Remove ${sampleVendorCount} sample vendor${sampleVendorCount === 1 ? "" : "s"}`}
+                  </button>
+                )}
               </div>
+
+              {sampleVendorCount > 0 && (
+                <p className="muted small setup-sample-hint">
+                  Sample vendors are for exploration only. Remove them when you&apos;re ready to add your real vendor list.
+                </p>
+              )}
             </div>
           )}
 
@@ -364,8 +410,9 @@ export function SetupGuide() {
                     <input name="name" placeholder="e.g. Annual service agreement" required />
                   </label>
                   <label>
-                    End date
+                    {CONTRACT_END_LABEL}
                     <input name="endDate" required type="date" />
+                    <span className="muted small">{CONTRACT_END_HINT}</span>
                   </label>
                   <label>
                     Value (optional)

@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { openFileUrl, resolveStorageUrl } from "../api/vendors";
 import {
   formatFileSize,
@@ -12,7 +12,8 @@ type FileAttachmentLinkProps = {
   fileName: string;
   fileSize?: number;
   variant?: "inline" | "title";
-  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  /** Opens in-app preview instead of a new browser tab. */
+  onPreview?: () => void;
 };
 
 export function FileAttachmentLink({
@@ -20,7 +21,7 @@ export function FileAttachmentLink({
   fileName,
   fileSize,
   variant = "inline",
-  onClick,
+  onPreview,
 }: FileAttachmentLinkProps) {
   const [href, setHref] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,6 +101,16 @@ export function FileAttachmentLink({
     );
   }
 
+  if (onPreview) {
+    return (
+      <div className="file-attachment-wrap">
+        <button type="button" className={className} onClick={onPreview}>
+          {label}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="file-attachment-wrap">
       <a
@@ -107,7 +118,6 @@ export function FileAttachmentLink({
         className={className}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={onClick}
         download={href.startsWith("blob:") ? fileName : undefined}
       >
         {label}

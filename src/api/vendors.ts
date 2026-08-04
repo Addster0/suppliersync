@@ -3,6 +3,7 @@ import { formatStorageError, ORG_FILES_BUCKET } from "../lib/storage";
 import type {
   Contact,
   Contract,
+  ContractRenewalType,
   DocumentItem,
   Evaluation,
   Experiment,
@@ -18,9 +19,19 @@ import {
   RENEWAL_RECENT_EXPIRED_DAYS,
   daysUntilEnd,
   formatDateForQuery,
+  getContractActionDate,
+  getContractDateLabel,
   getRenewalUrgency,
 } from "../lib/renewals";
-import { normalizeStorageFileUrl } from "../lib/utils";
+import { isSampleVendor } from "../lib/sampleVendors";
+import {
+  assertAllowedUploadMime,
+  assertValidStorageFileUrl,
+  getStoragePathFromFileUrl,
+  isDirectPreviewUrl,
+  normalizeStorageFileUrl,
+} from "../lib/utils";
+import { MAX_VENDOR_IMPORT_ROWS } from "../lib/vendorImport";
 import type { CsvVendorRow } from "../lib/csvImport";
 
 type VendorRow = {
@@ -45,9 +56,16 @@ type VendorRow = {
     id: string;
     title: string;
     start_date: string;
-    end_date: string;
+    end_date: string | null;
+    renewal_date: string | null;
+    renewal_type: ContractRenewalType;
+    notice_period_days: number | null;
+    term_months: number | null;
     value: number;
     status: Status;
+    created_at: string;
+    renewal_handled_at: string | null;
+    renewal_handled_note: string | null;
     file_url: string | null;
     file_name: string | null;
     file_size: number | null;
@@ -100,7 +118,9 @@ const vendorSelect = `
   created_at,
   contacts (id, name, role, email, phone),
   contracts (
-    id, title, start_date, end_date, value, status,
+    id, title, start_date, end_date, renewal_date, renewal_type,
+    notice_period_days, term_months, value, status,
+    created_at, renewal_handled_at, renewal_handled_note,
     file_url, file_name, file_size, mime_type
   ),
   documents (id, title, file_url, file_size, doc_type, expires_at, created_at),
@@ -108,6 +128,53 @@ const vendorSelect = `
   vendor_evaluations (id, eval_date, score, notes, criteria, recommendation, reviewer_name),
   vendor_experiments (id, title, description, status)
 `;
+
+type ContractRow = {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string | null;
+  renewal_date: string | null;
+  renewal_type: ContractRenewalType;
+  notice_period_days: number | null;
+  term_months: number | null;
+  value: number;
+  status: Status;
+  created_at?: string;
+  renewal_handled_at?: string | null;
+  renewal_handled_note?: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+};
+
+function mapContractRow(row: ContractRow): Contract {
+  return {
+    id: row.id,
+    name: row.title,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    renewalDate: row.renewal_date,
+    renewalType: row.renewal_type ?? "fixed_term",
+    noticePeriodDays: row.notice_period_days,
+    termMonths: row.term_months,
+    value: Number(row.value),
+    status: row.status,
+    createdAt: row.created_at?.slice(0, 10),
+    renewalHandledAt: row.renewal_handled_at ?? null,
+    renewalHandledNote: row.renewal_handled_note ?? null,
+    file:
+      row.file_url && row.file_name
+        ? {
+            fileName: row.file_name,
+            fileSize: row.file_size ?? 0,
+            fileUrl: normalizeStorageFileUrl(row.file_url),
+            mimeType: row.mime_type ?? "application/octet-stream",
+          }
+        : undefined,
+  };
+}
 
 function mapVendor(row: VendorRow): Vendor {
   return {
@@ -129,25 +196,7 @@ function mapVendor(row: VendorRow): Vendor {
         phone: c.phone,
       })
     ),
-    contracts: (row.contracts ?? []).map(
-      (c): Contract => ({
-        id: c.id,
-        name: c.title,
-        startDate: c.start_date,
-        endDate: c.end_date,
-        value: Number(c.value),
-        status: c.status,
-        file:
-          c.file_url && c.file_name
-            ? {
-                fileName: c.file_name,
-                fileSize: c.file_size ?? 0,
-                fileUrl: normalizeStorageFileUrl(c.file_url),
-                mimeType: c.mime_type ?? "application/octet-stream",
-              }
-            : undefined,
-      })
-    ),
+    contracts: (row.contracts ?? []).map(mapContractRow),
     ledger: (row.vendor_spend_snapshots ?? []).map(
       (entry): LedgerEntry => ({
         id: entry.id,
@@ -248,6 +297,15 @@ export async function deleteVendor(vendorId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function deleteSampleVendors(organizationId: string): Promise<number> {
+  const vendors = await fetchVendors(organizationId);
+  const samples = vendors.filter(isSampleVendor);
+  for (const vendor of samples) {
+    await deleteVendor(vendor.id);
+  }
+  return samples.length;
+}
+
 export async function addContact(organizationId: string, vendorId: string, contact: Omit<Contact, "id">) {
   const { error } = await requireSupabase().from("contacts").insert({
     organization_id: organizationId,
@@ -269,26 +327,135 @@ export async function addContract(
   organizationId: string,
   vendorId: string,
   contract: Omit<Contract, "id">
-) {
-  const { error } = await requireSupabase().from("contracts").insert({
-    organization_id: organizationId,
-    vendor_id: vendorId,
-    title: contract.name,
-    start_date: contract.startDate,
-    end_date: contract.endDate,
-    value: contract.value,
-    status: contract.status,
-    file_url: contract.file?.fileUrl ?? null,
-    file_name: contract.file?.fileName ?? null,
-    file_size: contract.file?.fileSize ?? null,
-    mime_type: contract.file?.mimeType ?? null,
-  });
-  if (error) throw new Error(error.message);
+): Promise<Contract> {
+  if (!organizationId.trim()) {
+    throw new Error("No workspace selected. Refresh the page and try again.");
+  }
+  if (!vendorId.trim()) {
+    throw new Error("No vendor selected. Pick a vendor and try again.");
+  }
+
+  const client = requireSupabase();
+  const { data: vendor, error: vendorError } = await client
+    .from("vendors")
+    .select("id")
+    .eq("id", vendorId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (vendorError) throw new Error(vendorError.message);
+  if (!vendor) {
+    throw new Error(
+      "This vendor is not in the current workspace. Refresh the page, confirm the workspace at the top, and try again."
+    );
+  }
+
+  const fileUrl = contract.file?.fileUrl ? assertValidStorageFileUrl(contract.file.fileUrl) : null;
+
+  const { data, error } = await client
+    .from("contracts")
+    .insert({
+      organization_id: organizationId,
+      vendor_id: vendorId,
+      title: contract.name,
+      start_date: contract.startDate,
+      end_date: contract.endDate,
+      renewal_date: contract.renewalDate,
+      renewal_type: contract.renewalType,
+      notice_period_days: contract.noticePeriodDays,
+      term_months: contract.termMonths,
+      value: contract.value,
+      status: contract.status,
+      file_url: fileUrl,
+      file_name: contract.file?.fileName ?? null,
+      file_size: contract.file?.fileSize ?? null,
+      mime_type: contract.file?.mimeType ?? null,
+    })
+    .select(
+      "id, title, start_date, end_date, renewal_date, renewal_type, notice_period_days, term_months, value, status, created_at, renewal_handled_at, renewal_handled_note, file_url, file_name, file_size, mime_type"
+    )
+    .single();
+
+  if (error) {
+    if (/row-level security|permission denied|not authorized/i.test(error.message)) {
+      throw new Error(
+        "You don't have permission to save contracts in this workspace. Confirm you're signed in as an owner, admin, or member."
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Contract save did not persist. Refresh and try again.");
+
+  return mapContractRow(data as ContractRow);
+}
+
+export async function updateContract(
+  contractId: string,
+  contract: Omit<Contract, "id">
+): Promise<Contract> {
+  const { data, error } = await requireSupabase()
+    .from("contracts")
+    .update({
+      title: contract.name,
+      start_date: contract.startDate,
+      end_date: contract.endDate,
+      renewal_date: contract.renewalDate,
+      renewal_type: contract.renewalType,
+      notice_period_days: contract.noticePeriodDays,
+      term_months: contract.termMonths,
+      value: contract.value,
+      status: contract.status,
+    })
+    .eq("id", contractId)
+    .select(
+      "id, title, start_date, end_date, renewal_date, renewal_type, notice_period_days, term_months, value, status, created_at, renewal_handled_at, renewal_handled_note, file_url, file_name, file_size, mime_type"
+    )
+    .single();
+
+  if (error) {
+    if (/row-level security|permission denied|not authorized/i.test(error.message)) {
+      throw new Error(
+        "You don't have permission to edit contracts in this workspace. Confirm you're signed in as an owner, admin, or member."
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Contract update did not persist. Refresh and try again.");
+
+  return mapContractRow(data as ContractRow);
 }
 
 export async function deleteContract(contractId: string) {
   const { error } = await requireSupabase().from("contracts").delete().eq("id", contractId);
   if (error) throw new Error(error.message);
+}
+
+export async function setRenewalHandled(
+  contractId: string,
+  handled: boolean,
+  note?: string
+): Promise<Contract> {
+  const { data, error } = await requireSupabase()
+    .from("contracts")
+    .update({
+      renewal_handled_at: handled ? new Date().toISOString() : null,
+      renewal_handled_note: handled ? note?.trim() || null : null,
+    })
+    .eq("id", contractId)
+    .select(
+      "id, title, start_date, end_date, renewal_date, renewal_type, notice_period_days, term_months, value, status, created_at, renewal_handled_at, renewal_handled_note, file_url, file_name, file_size, mime_type"
+    )
+    .single();
+
+  if (error) {
+    if (/row-level security|permission denied|not authorized/i.test(error.message)) {
+      throw new Error("You don't have permission to update renewals in this workspace.");
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Renewal update did not persist. Refresh and try again.");
+
+  return mapContractRow(data as ContractRow);
 }
 
 export async function addLedgerEntry(
@@ -317,17 +484,34 @@ export async function addDocument(
   organizationId: string,
   vendorId: string,
   document: Omit<DocumentItem, "id">
-) {
-  const { error } = await requireSupabase().from("documents").insert({
-    organization_id: organizationId,
-    vendor_id: vendorId,
-    title: document.fileName,
-    file_url: document.fileUrl,
-    file_size: document.fileSize,
-    doc_type: document.docType ?? "general",
-    expires_at: document.expiresAt ?? null,
-  });
-  if (error) throw new Error(error.message);
+): Promise<DocumentItem> {
+  const fileUrl = assertValidStorageFileUrl(document.fileUrl);
+
+  const { data, error } = await requireSupabase()
+    .from("documents")
+    .insert({
+      organization_id: organizationId,
+      vendor_id: vendorId,
+      title: document.fileName,
+      file_url: fileUrl,
+      file_size: document.fileSize,
+      doc_type: document.docType ?? "general",
+      expires_at: document.expiresAt ?? null,
+    })
+    .select("id, title, file_url, file_size, doc_type, expires_at, created_at")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Could not save document record.");
+
+  return {
+    id: data.id,
+    fileName: data.title,
+    fileSize: data.file_size,
+    createdAt: data.created_at.slice(0, 10),
+    fileUrl: normalizeStorageFileUrl(data.file_url),
+    docType: (data.doc_type as DocumentItem["docType"]) || "general",
+    expiresAt: data.expires_at?.slice(0, 10),
+  };
 }
 
 export async function deleteDocument(documentId: string) {
@@ -383,6 +567,7 @@ export async function uploadOrgFile(
   vendorId: string,
   file: File
 ): Promise<{ fileUrl: string; path: string }> {
+  assertAllowedUploadMime(file);
   const client = requireSupabase();
   const safeName = file.name.replace(/[^\w.-]+/g, "_");
   const path = `${organizationId}/${vendorId}/${Date.now()}-${safeName}`;
@@ -397,13 +582,48 @@ export async function uploadOrgFile(
   return { fileUrl: `sb://${path}`, path };
 }
 
+async function removeOrgFile(path: string) {
+  const { error } = await requireSupabase().storage.from(ORG_FILES_BUCKET).remove([path]);
+  if (error) {
+    console.warn("Could not remove uploaded file after save failed:", error.message);
+  }
+}
+
+export async function rollbackOrgUpload(path: string) {
+  await removeOrgFile(path);
+}
+
+export async function uploadAndAddDocument(
+  organizationId: string,
+  vendorId: string,
+  file: File,
+  document: Omit<DocumentItem, "id" | "fileName" | "fileSize" | "fileUrl" | "createdAt">
+): Promise<DocumentItem> {
+  const uploaded = await uploadOrgFile(organizationId, vendorId, file);
+  try {
+    return await addDocument(organizationId, vendorId, {
+      fileName: file.name,
+      fileSize: file.size,
+      createdAt: new Date().toISOString().slice(0, 10),
+      fileUrl: uploaded.fileUrl,
+      ...document,
+    });
+  } catch (error) {
+    await removeOrgFile(uploaded.path);
+    throw error;
+  }
+}
+
 export async function resolveStorageUrl(fileUrl: string): Promise<string> {
   const normalized = normalizeStorageFileUrl(fileUrl);
   if (!normalized.startsWith("sb://")) {
-    return normalized;
+    if (isDirectPreviewUrl(normalized)) {
+      return normalized;
+    }
+    throw new Error("File URL must be an internal storage path (sb://).");
   }
 
-  const path = normalized.slice(5);
+  const path = getStoragePathFromFileUrl(normalized);
   const client = requireSupabase();
 
   const { data, error } = await client.storage.from(ORG_FILES_BUCKET).createSignedUrl(path, 60 * 60);
@@ -478,6 +698,10 @@ export async function importVendorsFromCsv(
   missingContacts: number;
   withContracts: number;
 }> {
+  if (rows.length > MAX_VENDOR_IMPORT_ROWS) {
+    throw new Error(`Import is limited to ${MAX_VENDOR_IMPORT_ROWS} vendors per file.`);
+  }
+
   let imported = 0;
   const today = formatDateForQuery(new Date());
 
@@ -502,6 +726,10 @@ export async function importVendorsFromCsv(
         name: row.contractName,
         startDate: today,
         endDate: row.contractEndDate,
+        renewalDate: null,
+        renewalType: "fixed_term",
+        noticePeriodDays: null,
+        termMonths: null,
         value: row.contractValue ?? 0,
         status: "active",
       });
@@ -627,6 +855,79 @@ export async function seedSampleVendors(organizationId: string): Promise<void> {
   }
 }
 
+function mapRenewalRow(row: {
+  id: string;
+  title: string;
+  end_date: string | null;
+  renewal_date: string | null;
+  renewal_type: ContractRenewalType;
+  notice_period_days: number | null;
+  value: number;
+  status: string;
+  vendor_id: string;
+  renewal_handled_at?: string | null;
+  renewal_handled_note?: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  vendors: { name: string } | { name: string }[] | null;
+}): RenewalItem | null {
+  const vendor = row.vendors;
+  const vendorName = Array.isArray(vendor) ? vendor[0]?.name : vendor?.name;
+  if (!vendorName) return null;
+
+  const renewalType = (row.renewal_type ?? "fixed_term") as ContractRenewalType;
+  const actionDate = getContractActionDate({
+    renewalType,
+    endDate: row.end_date,
+    renewalDate: row.renewal_date,
+    noticePeriodDays: row.notice_period_days,
+  });
+
+  if (!actionDate) return null;
+
+  const days = daysUntilEnd(actionDate);
+  return {
+    contractId: row.id,
+    contractName: row.title,
+    vendorId: row.vendor_id,
+    vendorName,
+    actionDate,
+    dateLabel: getContractDateLabel(renewalType),
+    renewalType,
+    endDate: actionDate,
+    value: Number(row.value),
+    status: row.status as Status,
+    daysUntilEnd: days,
+    urgency: getRenewalUrgency(days),
+    renewalHandledAt: row.renewal_handled_at ?? null,
+    renewalHandledNote: row.renewal_handled_note ?? null,
+    fileUrl: row.file_url && row.file_name ? normalizeStorageFileUrl(row.file_url) : undefined,
+    fileName: row.file_name ?? undefined,
+    fileSize: row.file_size ?? undefined,
+  };
+}
+
+const renewalSelect = `
+  id,
+  title,
+  start_date,
+  end_date,
+  renewal_date,
+  renewal_type,
+  notice_period_days,
+  term_months,
+  value,
+  status,
+  vendor_id,
+  renewal_handled_at,
+  renewal_handled_note,
+  file_url,
+  file_name,
+  file_size,
+  vendors ( name )
+`;
+
 export async function fetchUpcomingRenewals(organizationId: string): Promise<RenewalItem[]> {
   const client = requireSupabase();
   const today = new Date();
@@ -638,51 +939,45 @@ export async function fetchUpcomingRenewals(organizationId: string): Promise<Ren
   const rangeEnd = new Date(today);
   rangeEnd.setDate(rangeEnd.getDate() + RENEWAL_LOOKAHEAD_DAYS);
 
+  const startIso = formatDateForQuery(rangeStart);
+  const endIso = formatDateForQuery(rangeEnd);
+
+  // Fetch all unhandled contracts; filter by getContractActionDate in JS so auto-renew
+  // notice deadlines are included even when end_date falls outside the window.
   const { data, error } = await client
     .from("contracts")
-    .select(
-      `
-      id,
-      title,
-      end_date,
-      value,
-      status,
-      vendor_id,
-      file_url,
-      file_name,
-      file_size,
-      vendors ( name )
-    `
-    )
+    .select(renewalSelect)
     .eq("organization_id", organizationId)
-    .gte("end_date", formatDateForQuery(rangeStart))
-    .lte("end_date", formatDateForQuery(rangeEnd))
-    .order("end_date", { ascending: true });
+    .is("renewal_handled_at", null)
+    .order("end_date", { ascending: true, nullsFirst: false });
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).flatMap((row) => {
-    const vendor = row.vendors as { name: string } | { name: string }[] | null;
-    const vendorName = Array.isArray(vendor) ? vendor[0]?.name : vendor?.name;
-    if (!vendorName) return [];
+  const items: RenewalItem[] = [];
 
-    const days = daysUntilEnd(row.end_date);
-    return [
-      {
-        contractId: row.id,
-        contractName: row.title,
-        vendorId: row.vendor_id,
-        vendorName,
-        endDate: row.end_date,
-        value: Number(row.value),
-        status: row.status as Status,
-        daysUntilEnd: days,
-        urgency: getRenewalUrgency(days),
-        fileUrl:
-          row.file_url && row.file_name ? normalizeStorageFileUrl(row.file_url) : undefined,
-        fileName: row.file_name ?? undefined,
-        fileSize: row.file_size ?? undefined,
-      },
-    ];
-  });
+  for (const row of data ?? []) {
+    const item = mapRenewalRow(row);
+    if (!item || item.actionDate < startIso || item.actionDate > endIso) continue;
+    items.push(item);
+  }
+
+  return items.sort((a, b) => a.actionDate.localeCompare(b.actionDate));
+}
+
+export async function fetchHandledRenewals(organizationId: string): Promise<RenewalItem[]> {
+  const { data, error } = await requireSupabase()
+    .from("contracts")
+    .select(renewalSelect)
+    .eq("organization_id", organizationId)
+    .not("renewal_handled_at", "is", null)
+    .order("renewal_handled_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const items: RenewalItem[] = [];
+  for (const row of data ?? []) {
+    const item = mapRenewalRow(row);
+    if (item) items.push(item);
+  }
+  return items;
 }

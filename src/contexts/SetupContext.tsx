@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -52,6 +53,7 @@ export function SetupProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [setupOpen, setSetupOpen] = useState(false);
   const [documentSkipped, setDocumentSkipped] = useState(false);
+  const setupFetchGenRef = useRef(0);
 
   useEffect(() => {
     if (!organizationId) {
@@ -69,19 +71,24 @@ export function SetupProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const fetchGen = ++setupFetchGenRef.current;
     setLoading(true);
     try {
       const [vendorData, renewalData] = await Promise.all([
         fetchVendors(organizationId),
         fetchUpcomingRenewals(organizationId),
       ]);
+      if (fetchGen !== setupFetchGenRef.current) return;
       setVendors(vendorData);
       setRenewals(renewalData);
     } catch {
+      if (fetchGen !== setupFetchGenRef.current) return;
       setVendors([]);
       setRenewals([]);
     } finally {
-      setLoading(false);
+      if (fetchGen === setupFetchGenRef.current) {
+        setLoading(false);
+      }
     }
   }, [organizationId]);
 

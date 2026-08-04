@@ -1,3 +1,7 @@
+import { CONTRACT_END_LABEL } from "./renewals";
+
+export const MAX_VENDOR_IMPORT_ROWS = 500;
+
 export type VendorImportRow = {
   name: string;
   category: string;
@@ -36,7 +40,7 @@ export const VENDOR_IMPORT_FIELDS: {
   { key: "contact_email", label: "Contact email" },
   { key: "contact_phone", label: "Contact phone" },
   { key: "contract_name", label: "Contract name" },
-  { key: "contract_end_date", label: "Contract end / renewal date" },
+  { key: "contract_end_date", label: CONTRACT_END_LABEL },
   { key: "contract_value", label: "Contract value" },
 ];
 
@@ -279,6 +283,13 @@ export function rowsFromMappedTable(
 
   if (!mappingIsValid(mapping)) {
     return { rows: [], errors: ["Map vendor name and category columns before importing."] };
+  }
+
+  if (table.rows.length > MAX_VENDOR_IMPORT_ROWS) {
+    return {
+      rows: [],
+      errors: [`Import is limited to ${MAX_VENDOR_IMPORT_ROWS} vendors per file.`],
+    };
   }
 
   const get = (row: string[], field: VendorImportField) => {

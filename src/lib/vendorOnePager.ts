@@ -1,4 +1,4 @@
-import { formatDaysUntil, daysUntilEnd } from "./renewals";
+import { CONTRACT_END_LABEL, CONTRACT_START_LABEL, formatDaysUntil, daysUntilEnd, getContractActionDate, getContractDateLabel } from "./renewals";
 import { ledgerPaymentTotal, vendorNetLedgerBalance, vendorYtdSpend } from "./spend";
 import { complianceLabel } from "./attention";
 import type { Vendor } from "../types";
@@ -14,8 +14,11 @@ function escapeHtml(value: string) {
 
 function nextRenewal(vendor: Vendor) {
   const upcoming = vendor.contracts
-    .filter((contract) => contract.endDate)
-    .map((contract) => ({ contract, days: daysUntilEnd(contract.endDate) }))
+    .flatMap((contract) => {
+      const actionDate = getContractActionDate(contract);
+      if (!actionDate) return [];
+      return [{ contract, days: daysUntilEnd(actionDate), actionDate }];
+    })
     .sort((a, b) => a.days - b.days);
   return upcoming[0];
 }
@@ -57,7 +60,7 @@ export function openVendorOnePager(vendor: Vendor, workspaceName: string) {
   <table>
     <tr><th>Primary contact</th><td>${primaryContact ? `${escapeHtml(primaryContact.name)}${primaryContact.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}<br>${escapeHtml(primaryContact.email || "—")}${primaryContact.phone ? `<br>${escapeHtml(primaryContact.phone)}` : ""}` : "None on file"}</td></tr>
     <tr><th>Address</th><td>${vendor.address ? escapeHtml(vendor.address) : "—"}</td></tr>
-    <tr><th>Next renewal</th><td>${renewal ? `${escapeHtml(renewal.contract.name)} · ends ${escapeHtml(prettyDate(renewal.contract.endDate))} (${escapeHtml(formatDaysUntil(renewal.days))})` : "No contracts with end dates"}</td></tr>
+    <tr><th>Next renewal</th><td>${renewal ? `${escapeHtml(renewal.contract.name)} · ${escapeHtml(getContractDateLabel(renewal.contract.renewalType))}: ${escapeHtml(prettyDate(renewal.actionDate))} (${escapeHtml(formatDaysUntil(renewal.days, renewal.contract.renewalType))})` : "No contracts with renewal or review dates"}</td></tr>
     <tr><th>YTD spend logged</th><td>${escapeHtml(money(ytdSpend))}</td></tr>
     <tr><th>Net spend balance</th><td>${escapeHtml(money(netBalance))} <span class="muted">(${escapeHtml(money(totalPayments))} in payments)</span></td></tr>
     <tr><th>Notes</th><td>${vendor.notes ? escapeHtml(vendor.notes) : "—"}</td></tr>
@@ -78,10 +81,10 @@ export function openVendorOnePager(vendor: Vendor, workspaceName: string) {
   <h2>Contracts (${vendor.contracts.length})</h2>
   ${
     vendor.contracts.length
-      ? `<table><tr><th>Contract</th><th>Dates</th><th>Value</th><th>Status</th></tr>${vendor.contracts
+      ? `<table><tr><th>Contract</th><th>${escapeHtml(CONTRACT_START_LABEL)}</th><th>${escapeHtml(CONTRACT_END_LABEL)}</th><th>Value</th><th>Status</th></tr>${vendor.contracts
           .map(
             (contract) =>
-              `<tr><td>${escapeHtml(contract.name)}${contract.file ? `<br><span class="muted">📎 ${escapeHtml(contract.file.fileName)}</span>` : ""}</td><td>${escapeHtml(prettyDate(contract.startDate))} – ${escapeHtml(prettyDate(contract.endDate))}</td><td>${escapeHtml(money(contract.value))}</td><td>${escapeHtml(contract.status)}</td></tr>`
+              `<tr><td>${escapeHtml(contract.name)}${contract.file ? `<br><span class="muted">📎 ${escapeHtml(contract.file.fileName)}</span>` : ""}</td><td>${escapeHtml(prettyDate(contract.startDate))}</td><td>${escapeHtml(getContractActionDate(contract) ? prettyDate(getContractActionDate(contract)!) : "—")}</td><td>${escapeHtml(money(contract.value))}</td><td>${escapeHtml(contract.status)}</td></tr>`
           )
           .join("")}</table>`
       : `<p class="muted">No contracts on file.</p>`

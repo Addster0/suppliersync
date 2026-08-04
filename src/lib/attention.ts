@@ -1,4 +1,4 @@
-import { daysUntilEnd, getRenewalUrgency } from "./renewals";
+import { daysUntilEnd, getContractActionDate, getRenewalUrgency } from "./renewals";
 import { vendorYtdSpend } from "./spend";
 import type { DocumentItem, RenewalItem, Vendor } from "../types";
 
@@ -51,7 +51,7 @@ export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]):
         id: `renewal-${renewal.contractId}`,
         severity: renewal.urgency === "overdue" ? "critical" : "warning",
         title: renewal.urgency === "overdue" ? "Contract overdue" : "Renewal due soon",
-        detail: `${renewal.contractName} · ${renewal.vendorName} · ${renewal.endDate}`,
+        detail: `${renewal.contractName} · ${renewal.vendorName} · ${renewal.actionDate}`,
         href: `/app?vendor=${renewal.vendorId}&tab=contracts`,
         actionLabel: "View contract",
       });
@@ -97,8 +97,9 @@ export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]):
     }
 
     for (const contract of vendor.contracts) {
-      if (!contract.endDate) continue;
-      const days = daysUntilEnd(contract.endDate);
+      const actionDate = getContractActionDate(contract);
+      if (!actionDate) continue;
+      const days = daysUntilEnd(actionDate);
       const urgency = getRenewalUrgency(days);
       if (urgency === "upcoming" && days <= 60) {
         const alreadyListed = renewals.some((item) => item.contractId === contract.id);
@@ -106,8 +107,8 @@ export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]):
           items.push({
             id: `contract-soon-${contract.id}`,
             severity: "info",
-            title: "Upcoming contract end",
-            detail: `${contract.name} · ${vendor.name} · ends ${contract.endDate}`,
+            title: "Upcoming contract review",
+            detail: `${contract.name} · ${vendor.name} · ${actionDate}`,
             href: `/app?vendor=${vendor.id}&tab=contracts`,
             actionLabel: "Review contract",
           });

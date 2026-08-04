@@ -97,7 +97,12 @@ export function DocumentViewerModal({
           {loading && <p className="muted">Loading document…</p>}
           {error && <p className="form-error">{error}</p>}
           {!loading && !error && url && previewKind === "pdf" && (
-            <iframe title={fileName} src={url} className="doc-viewer-frame" />
+            <iframe
+              title={fileName}
+              src={url}
+              className="doc-viewer-frame"
+              sandbox="allow-same-origin allow-scripts allow-downloads"
+            />
           )}
           {!loading && !error && url && previewKind === "image" && (
             <img src={url} alt={fileName} className="doc-viewer-image" />

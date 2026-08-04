@@ -1,6 +1,14 @@
-export const TERMS_VERSION = "2026-06-16";
-export const LEGAL_LAST_UPDATED = "June 16, 2026";
-export const LEGAL_CONTACT_EMAIL = "legal@suppliersync.com";
+export const TERMS_VERSION = "2026-08-03";
+export const LEGAL_LAST_UPDATED = "August 3, 2026";
+export const LEGAL_CONTACT_EMAIL = "legal@suppliersync.org";
+
+export function hasAcceptedCurrentTerms(status: {
+  termsAcceptedAt: string | null;
+  termsVersion: string | null;
+}): boolean {
+  if (!status.termsAcceptedAt || !status.termsVersion) return false;
+  return status.termsVersion === TERMS_VERSION;
+}
 
 export type LegalSection = {
   title: string;
@@ -19,8 +27,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "2. The Service",
     paragraphs: [
-      "SupplierSync helps private medical clinics organize vendor records, contracts, compliance documents, renewals, and related operational information in a secure workspace.",
-      "The Service is a business operations tool. It is not medical software, legal advice, accounting software, or a substitute for professional counsel. You remain responsible for your clinic's vendor decisions, contract terms, and regulatory compliance.",
+      "SupplierSync helps private medical clinics organize vendor records, contracts, compliance documents, renewals, and related operational information in a secure workspace. Access is provided on a subscription basis.",
+      "The Service is a business operations tool operated as an independent software product. It is not medical software, legal advice, accounting software, or a substitute for professional counsel. You remain responsible for your clinic's vendor decisions, contract terms, and regulatory compliance.",
     ],
   },
   {
@@ -88,15 +96,12 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "11. Changes",
     paragraphs: [
-      `We may update these Terms from time to time. We will post the revised Terms with an updated "Last updated" date. Material changes may require renewed acceptance at signup or login. Continued use after changes become effective constitutes acceptance.`,
+      `We may update these Terms from time to time. We will post the revised Terms with an updated version date. When we make material changes, we may require you to accept the updated Terms before continuing to use the Service.`,
     ],
   },
   {
     title: "12. Contact",
-    paragraphs: [
-      `Questions about these Terms: ${LEGAL_CONTACT_EMAIL}.`,
-      "These Terms are a general product template and do not constitute legal advice. Clinics should consult their own counsel for compliance questions.",
-    ],
+    paragraphs: [`Questions about these Terms: ${LEGAL_CONTACT_EMAIL}.`],
   },
 ];
 

@@ -15,7 +15,7 @@ chmod +x scripts/setup-renewal-email.sh
 RESEND_API_KEY=re_your_key ./scripts/setup-renewal-email.sh
 ```
 
-This sets secrets, `APP_URL=https://vendor-prototype.vercel.app`, and redeploys the edge function.
+This sets secrets, `APP_URL=https://suppliersync.org`, and redeploys the edge function.
 
 4. In Supabase **SQL Editor**, run migrations **006**, **007**, **008**, and **009** if you have not already.
 5. Open **Renewals** → **Send test email** — mail should arrive in that Gmail inbox.
@@ -52,7 +52,7 @@ In Supabase → **SQL Editor**, run:
 |--------|---------|
 | `RESEND_API_KEY` | `re_...` |
 | `RENEWAL_FROM_EMAIL` | `SupplierSync <renewals@yourdomain.com>` |
-| `APP_URL` | `https://vendor-prototype.vercel.app` |
+| `APP_URL` | `https://suppliersync.org` |
 | `CRON_SECRET` | Long random string for daily cron calls |
 
 Or use `./scripts/setup-renewal-email.sh`.
@@ -100,7 +100,7 @@ Schedule `weekly_cron` once per day (e.g. Monday 8am). Orgs with `weekly_digest_
 | Symptom | Fix |
 |---------|-----|
 | Success in app, wrong inbox | Resend sandbox — verify domain or use Resend signup email |
-| Links go to localhost | Set `APP_URL` secret to your Vercel URL |
+| Links go to localhost | Set `APP_URL` secret to `https://suppliersync.org` |
 | `RESEND_API_KEY is not configured` | Run setup script or add secret + redeploy |
 | `renewal_reminders_enabled does not exist` | Run migration 006 |
 | 403 from Resend | Domain not verified, or sandbox recipient mismatch |

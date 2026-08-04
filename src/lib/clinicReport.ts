@@ -1,6 +1,6 @@
 import { buildAttentionItems, workspaceSpendSummary, complianceLabel } from "./attention";
 import { topVendorsBySpend } from "./spend";
-import { urgencyLabel } from "./renewals";
+import { CONTRACT_START_LABEL, urgencyLabel } from "./renewals";
 import type { RenewalItem, Vendor } from "../types";
 import { money, openPrintableHtml } from "./utils";
 
@@ -31,7 +31,7 @@ export function openClinicReport(params: {
     .sort((a, b) => a.daysUntilEnd - b.daysUntilEnd)
     .map(
       (item) =>
-        `<tr><td>${escapeHtml(item.vendorName)}</td><td>${escapeHtml(item.contractName)}</td><td>${escapeHtml(item.endDate)}</td><td>${escapeHtml(urgencyLabel(item.urgency))}</td><td>${escapeHtml(money(item.value))}</td></tr>`
+        `<tr><td>${escapeHtml(item.vendorName)}</td><td>${escapeHtml(item.contractName)}</td><td>${escapeHtml(item.dateLabel)}: ${escapeHtml(item.actionDate)}</td><td>${escapeHtml(urgencyLabel(item.urgency))}</td><td>${escapeHtml(money(item.value))}</td></tr>`
     )
     .join("");
 
@@ -106,7 +106,7 @@ export function openClinicReport(params: {
   <h2>Renewals (${renewals.length})</h2>
   ${
     renewals.length
-      ? `<table><tr><th>Vendor</th><th>Contract</th><th>End date</th><th>Status</th><th>Value</th></tr>${renewalRows}</table>`
+      ? `<table><tr><th>Vendor</th><th>Contract</th><th>Date</th><th>Status</th><th>Value</th></tr>${renewalRows}</table>`
       : `<p class="muted">No renewals in the current window.</p>`
   }
 

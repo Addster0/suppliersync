@@ -16,10 +16,15 @@ const REMINDER_WINDOWS: { key: ReminderWindow; offsetDays: number; label: string
   { key: "due_today", offsetDays: 0, label: "due today" },
 ];
 
+type ContractRenewalType = "fixed_term" | "auto_renew" | "month_to_month" | "evergreen";
+
 type ContractRow = {
   id: string;
   title: string;
-  end_date: string;
+  end_date: string | null;
+  renewal_date: string | null;
+  renewal_type: ContractRenewalType;
+  notice_period_days: number | null;
   value: number;
   vendor_id: string;
   vendors: { name: string } | { name: string }[] | null;
@@ -69,6 +74,30 @@ function daysUntilEnd(endDate: string) {
   today.setHours(0, 0, 0, 0);
   return Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+function subtractDaysFromIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() - days);
+  return formatDateForQuery(date);
+}
+
+function getContractActionDate(row: Pick<
+  ContractRow,
+  "renewal_type" | "end_date" | "renewal_date" | "notice_period_days"
+>): string | null {
+  if (row.renewal_date) return row.renewal_date;
+  if (row.renewal_type === "auto_renew" && row.end_date && row.notice_period_days) {
+    return subtractDaysFromIsoDate(row.end_date, row.notice_period_days);
+  }
+  return row.end_date;
+}
+
+function contractMatchesActionDate(row: ContractRow, targetDate: string): boolean {
+  return getContractActionDate(row) === targetDate;
+}
+
+const CONTRACT_SELECT =
+  "id, title, end_date, renewal_date, renewal_type, notice_period_days, value, vendor_id, vendors ( name )";
 
 function vendorNameFromRow(vendors: ContractRow["vendors"]) {
   if (!vendors) return null;
@@ -223,6 +252,29 @@ function emailDeliveryNote(fromEmail: string) {
   return "Production sender configured — reminders can deliver to workspace owners and admins.";
 }
 
+function resolveNotificationEmail(
+  renewalNotificationEmail: string | null | undefined,
+  authEmail: string | null | undefined
+) {
+  const override = renewalNotificationEmail?.trim();
+  if (override) return override;
+  return authEmail?.trim() ?? "";
+}
+
+async function getProfileNotificationEmail(
+  admin: ReturnType<typeof createClient>,
+  userId: string
+) {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("renewal_notification_email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data?.renewal_notification_email ?? null;
+}
+
 async function getAdminEmails(
   admin: ReturnType<typeof createClient>,
   organizationId: string
@@ -235,13 +287,33 @@ async function getAdminEmails(
 
   if (error) throw new Error(error.message);
 
+  const userIds = (data ?? []).map((row) => row.user_id);
+  if (userIds.length === 0) return [] as string[];
+
+  const { data: profiles, error: profileError } = await admin
+    .from("profiles")
+    .select("id, renewal_notification_email")
+    .in("id", userIds);
+
+  if (profileError) throw new Error(profileError.message);
+
+  const profileMap = new Map(
+    (profiles ?? []).map((row) => [row.id, row.renewal_notification_email as string | null])
+  );
+
   const emails: string[] = [];
 
-  for (const row of data ?? []) {
-    const { data: authData, error: authError } = await admin.auth.admin.getUserById(row.user_id);
-    if (!authError && authData.user?.email) {
-      emails.push(authData.user.email);
+  for (const userId of userIds) {
+    const override = profileMap.get(userId);
+    if (override?.trim()) {
+      emails.push(override.trim());
+      continue;
     }
+
+    const { data: authData, error: authError } = await admin.auth.admin.getUserById(userId);
+    const authEmail = !authError ? authData.user?.email : null;
+    const resolved = resolveNotificationEmail(null, authEmail);
+    if (resolved) emails.push(resolved);
   }
 
   return [...new Set(emails)];
@@ -257,16 +329,25 @@ async function fetchContractsForTest(admin: ReturnType<typeof createClient>, org
   const rangeEnd = new Date(today);
   rangeEnd.setDate(rangeEnd.getDate() + 90);
 
+  const startIso = formatDateForQuery(rangeStart);
+  const endIso = formatDateForQuery(rangeEnd);
+
   const { data, error } = await admin
     .from("contracts")
-    .select("id, title, end_date, value, vendor_id, vendors ( name )")
+    .select(CONTRACT_SELECT)
     .eq("organization_id", organizationId)
-    .gte("end_date", formatDateForQuery(rangeStart))
-    .lte("end_date", formatDateForQuery(rangeEnd))
-    .order("end_date", { ascending: true });
+    .is("renewal_handled_at", null)
+    .or(
+      `and(end_date.gte.${startIso},end_date.lte.${endIso}),and(renewal_date.gte.${startIso},renewal_date.lte.${endIso})`
+    )
+    .order("end_date", { ascending: true, nullsFirst: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ContractRow[];
+
+  return (data ?? []).filter((row) => {
+    const actionDate = getContractActionDate(row as ContractRow);
+    return actionDate && actionDate >= startIso && actionDate <= endIso;
+  }) as ContractRow[];
 }
 
 async function fetchContractsForWindow(
@@ -277,13 +358,16 @@ async function fetchContractsForWindow(
 ) {
   const { data, error } = await admin
     .from("contracts")
-    .select("id, title, end_date, value, vendor_id, vendors ( name )")
+    .select(CONTRACT_SELECT)
     .eq("organization_id", organizationId)
-    .eq("end_date", endDate);
+    .is("renewal_handled_at", null)
+    .or(`end_date.eq.${endDate},renewal_date.eq.${endDate}`);
 
   if (error) throw new Error(error.message);
 
-  const contracts = (data ?? []) as ContractRow[];
+  const contracts = ((data ?? []) as ContractRow[]).filter((row) =>
+    contractMatchesActionDate(row, endDate)
+  );
   if (contracts.length === 0) return [] as ReminderLine[];
 
   const contractIds = contracts.map((row) => row.id);
@@ -310,11 +394,11 @@ async function fetchContractsForWindow(
         contractName: row.title,
         vendorName,
         vendorId: row.vendor_id,
-        endDate: row.end_date,
+        endDate: getContractActionDate(row)!,
         value: Number(row.value),
         window,
         windowLabel: windowMeta.label,
-        daysUntilEnd: daysUntilEnd(row.end_date),
+        daysUntilEnd: daysUntilEnd(getContractActionDate(row)!),
       },
     ];
   });
@@ -330,7 +414,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RENEWAL_FROM_EMAIL") ?? "SupplierSync <onboarding@resend.dev>";
-    const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
+    const appUrl = Deno.env.get("APP_URL") ?? "https://suppliersync.org";
     const cronSecret = Deno.env.get("CRON_SECRET");
 
     if (!supabaseUrl || !serviceKey) {
@@ -411,7 +495,8 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: orgError?.message ?? "Organization not found." }, 404);
       }
 
-      const recipientEmail = user.email?.trim();
+      const profileOverride = await getProfileNotificationEmail(admin, user.id);
+      const recipientEmail = resolveNotificationEmail(profileOverride, user.email);
       if (!recipientEmail) {
         return jsonResponse({ error: "Could not find your email address." }, 400);
       }
@@ -421,7 +506,10 @@ Deno.serve(async (req) => {
         const vendorName = vendorNameFromRow(row.vendors);
         if (!vendorName) return [];
 
-        const days = daysUntilEnd(row.end_date);
+        const actionDate = getContractActionDate(row);
+        if (!actionDate) return [];
+
+        const days = daysUntilEnd(actionDate);
         const window: ReminderWindow =
           days === 0 ? "due_today" : days === 7 ? "7_days" : days === 30 ? "30_days" : "90_days";
 
@@ -431,7 +519,7 @@ Deno.serve(async (req) => {
             contractName: row.title,
             vendorName,
             vendorId: row.vendor_id,
-            endDate: row.end_date,
+            endDate: actionDate,
             value: Number(row.value),
             window,
             windowLabel: "preview",
@@ -585,12 +673,17 @@ Deno.serve(async (req) => {
       const rangeEnd = new Date(today);
       rangeEnd.setDate(rangeEnd.getDate() + 90);
 
+      const startIso = formatDateForQuery(rangeStart);
+      const endIso = formatDateForQuery(rangeEnd);
+
       const { data: contracts, error: contractsError } = await admin
         .from("contracts")
-        .select("id, title, end_date, vendor_id, vendors ( name )")
+        .select(CONTRACT_SELECT)
         .eq("organization_id", organizationId)
-        .gte("end_date", formatDateForQuery(rangeStart))
-        .lte("end_date", formatDateForQuery(rangeEnd));
+        .is("renewal_handled_at", null)
+        .or(
+          `and(end_date.gte.${startIso},end_date.lte.${endIso}),and(renewal_date.gte.${startIso},renewal_date.lte.${endIso})`
+        );
 
       if (contractsError) throw new Error(contractsError.message);
 
@@ -598,16 +691,19 @@ Deno.serve(async (req) => {
       const listedContractIds = new Set<string>();
 
       for (const row of contracts ?? []) {
-        const vendorName = vendorNameFromRow(row.vendors as ContractRow["vendors"]);
+        const contractRow = row as ContractRow;
+        const vendorName = vendorNameFromRow(contractRow.vendors);
         if (!vendorName) continue;
-        const days = daysUntilEnd(row.end_date);
+        const actionDate = getContractActionDate(contractRow);
+        if (!actionDate || actionDate < startIso || actionDate > endIso) continue;
+        const days = daysUntilEnd(actionDate);
         const urgency = renewalUrgency(days);
         if (urgency === "overdue" || urgency === "soon") {
-          listedContractIds.add(row.id);
+          listedContractIds.add(contractRow.id);
           items.push({
             severity: urgency === "overdue" ? "critical" : "warning",
             title: urgency === "overdue" ? "Contract overdue" : "Renewal due soon",
-            detail: `${row.title} · ${vendorName} · ${row.end_date}`,
+            detail: `${contractRow.title} · ${vendorName} · ${actionDate}`,
           });
         }
       }
@@ -621,7 +717,7 @@ Deno.serve(async (req) => {
           status,
           contacts ( id ),
           documents ( id, doc_type, expires_at ),
-          contracts ( id, title, end_date )
+          contracts ( id, title, end_date, renewal_date, renewal_type, notice_period_days )
         `
         )
         .eq("organization_id", organizationId);
@@ -665,14 +761,19 @@ Deno.serve(async (req) => {
         }
 
         for (const contract of vendor.contracts ?? []) {
-          if (!contract.end_date || listedContractIds.has(contract.id)) continue;
-          const days = daysUntilEnd(contract.end_date);
+          const contractRow = contract as Pick<
+            ContractRow,
+            "id" | "title" | "end_date" | "renewal_date" | "renewal_type" | "notice_period_days"
+          >;
+          const actionDate = getContractActionDate(contractRow);
+          if (!actionDate || listedContractIds.has(contractRow.id)) continue;
+          const days = daysUntilEnd(actionDate);
           const urgency = renewalUrgency(days);
           if (urgency === "upcoming" && days <= 60) {
             items.push({
               severity: "info",
-              title: "Upcoming contract end",
-              detail: `${contract.title} · ${vendor.name} · ends ${contract.end_date}`,
+              title: "Upcoming contract review",
+              detail: `${contractRow.title} · ${vendor.name} · ${actionDate}`,
             });
           }
         }
@@ -812,7 +913,8 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: orgError?.message ?? "Organization not found." }, 404);
       }
 
-      const recipientEmail = user.email?.trim();
+      const profileOverride = await getProfileNotificationEmail(admin, user.id);
+      const recipientEmail = resolveNotificationEmail(profileOverride, user.email);
       if (!recipientEmail) {
         return jsonResponse({ error: "Could not find your email address." }, 400);
       }

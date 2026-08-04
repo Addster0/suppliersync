@@ -1,4 +1,4 @@
-import { daysUntilEnd } from "./renewals";
+import { daysUntilEnd, getContractActionDate } from "./renewals";
 import type { Vendor } from "../types";
 
 export type VendorSortKey =
@@ -35,9 +35,11 @@ function compareText(a: string, b: string) {
 }
 
 function nextRenewalDays(vendor: Vendor): number | null {
-  const upcoming = vendor.contracts
-    .filter((contract) => contract.endDate)
-    .map((contract) => daysUntilEnd(contract.endDate));
+  const upcoming = vendor.contracts.flatMap((contract) => {
+    const actionDate = getContractActionDate(contract);
+    if (!actionDate) return [];
+    return [daysUntilEnd(actionDate)];
+  });
   if (upcoming.length === 0) return null;
   return Math.min(...upcoming);
 }

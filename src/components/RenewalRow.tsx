@@ -1,50 +1,178 @@
 import { Link } from "react-router-dom";
+import { FormEvent, useState } from "react";
+import { DocumentViewerModal } from "./DocumentViewerModal";
 import { FileAttachmentLink } from "./FileAttachmentLink";
 import type { RenewalItem } from "../types";
 import { formatDaysUntil, vendorContractsUrl } from "../lib/renewals";
 import { getStatusClass, hasDownloadableFile, money, prettyDate } from "../lib/utils";
 
-export function RenewalRow({ item }: { item: RenewalItem }) {
+export function RenewalRow({
+  item,
+  handled = false,
+  canMarkHandled = false,
+  onMarkHandled,
+  onReopen,
+}: {
+  item: RenewalItem;
+  handled?: boolean;
+  canMarkHandled?: boolean;
+  onMarkHandled?: (contractId: string, note: string) => Promise<void>;
+  onReopen?: (contractId: string) => Promise<void>;
+}) {
   const hasFile = Boolean(item.fileUrl && item.fileName && hasDownloadableFile(item.fileUrl));
+  const [viewingFile, setViewingFile] = useState(false);
+  const [showHandleForm, setShowHandleForm] = useState(false);
+  const [handleNote, setHandleNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  async function submitHandled(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onMarkHandled) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      await onMarkHandled(item.contractId, handleNote);
+      setShowHandleForm(false);
+      setHandleNote("");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not mark renewal handled.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReopen() {
+    if (!onReopen) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      await onReopen(item.contractId);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not reopen renewal.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className={`renewal-row-wrap renewal-row-wrap--${item.urgency}`}>
-      <Link className={`renewal-row renewal-row--${item.urgency}`} to={vendorContractsUrl(item.vendorId)}>
+    <div className={`renewal-row-wrap renewal-row-wrap--${handled ? "handled" : item.urgency}`}>
+      <Link className={`renewal-row renewal-row--${handled ? "handled" : item.urgency}`} to={vendorContractsUrl(item.vendorId)}>
         <div className="renewal-row-main">
           <strong>{item.contractName}</strong>
           <p className="muted small">
-            {item.vendorName} · ends {prettyDate(item.endDate)}
+            {item.vendorName} · {item.dateLabel}: {prettyDate(item.actionDate)}
           </p>
+          {handled && item.renewalHandledAt && (
+            <p className="muted small">
+              Handled {prettyDate(item.renewalHandledAt.slice(0, 10))}
+              {item.renewalHandledNote ? ` · ${item.renewalHandledNote}` : ""}
+            </p>
+          )}
         </div>
         <div className="renewal-row-meta">
-          <span className={`renewal-urgency renewal-urgency--${item.urgency}`}>
-            {formatDaysUntil(item.daysUntilEnd)}
-          </span>
+          {!handled && (
+            <span className={`renewal-urgency renewal-urgency--${item.urgency}`}>
+              {formatDaysUntil(item.daysUntilEnd, item.renewalType)}
+            </span>
+          )}
+          {handled && <span className="badge active">Handled</span>}
           <span className="muted small">{money(item.value)}</span>
           <span className={getStatusClass(item.status)}>{item.status}</span>
         </div>
       </Link>
       {hasFile && item.fileUrl && item.fileName && (
-        <div className="renewal-row-file">
+        <div className="renewal-row-file" onClick={(event) => event.preventDefault()}>
           <FileAttachmentLink
             fileUrl={item.fileUrl}
             fileName={item.fileName}
             fileSize={item.fileSize}
-            onClick={(event) => event.stopPropagation()}
+            onPreview={() => setViewingFile(true)}
           />
         </div>
+      )}
+      {canMarkHandled && !handled && onMarkHandled && (
+        <div className="renewal-row-actions" onClick={(event) => event.preventDefault()}>
+          {!showHandleForm ? (
+            <button
+              type="button"
+              className="secondary renewal-handle-button"
+              disabled={saving}
+              onClick={() => setShowHandleForm(true)}
+            >
+              Mark handled
+            </button>
+          ) : (
+            <form className="renewal-handle-form" onSubmit={(event) => void submitHandled(event)}>
+              <label className="field-block">
+                <span className="label">Optional note</span>
+                <input
+                  value={handleNote}
+                  onChange={(event) => setHandleNote(event.target.value)}
+                  placeholder="e.g. Renewed for 12 months"
+                />
+              </label>
+              <div className="renewal-handle-form__actions">
+                <button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Renewal taken care of"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={saving}
+                  onClick={() => {
+                    setShowHandleForm(false);
+                    setHandleNote("");
+                    setActionError("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+      {canMarkHandled && handled && onReopen && (
+        <div className="renewal-row-actions" onClick={(event) => event.preventDefault()}>
+          <button type="button" className="secondary renewal-handle-button" disabled={saving} onClick={() => void handleReopen()}>
+            {saving ? "Saving…" : "Reopen"}
+          </button>
+        </div>
+      )}
+      {actionError && <p className="form-error renewal-row-error">{actionError}</p>}
+      {viewingFile && item.fileUrl && item.fileName && (
+        <DocumentViewerModal
+          fileUrl={item.fileUrl}
+          fileName={item.fileName}
+          fileSize={item.fileSize}
+          onClose={() => setViewingFile(false)}
+        />
       )}
     </div>
   );
 }
 
-export function RenewalsEmptyState() {
+export function RenewalsEmptyState({ handled = false }: { handled?: boolean }) {
+  if (handled) {
+    return (
+      <div className="renewals-empty card">
+        <h3>No handled renewals yet</h3>
+        <p className="muted small">
+          When you mark a renewal as handled, it moves here so your open list stays focused on what still needs
+          action.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="renewals-empty card">
       <h3>No renewals on the horizon</h3>
       <p className="muted small">
-        Contracts with end dates in the next 90 days (or expired in the last 30) will show up here. Add end dates on
-        each vendor&apos;s <strong>Contracts</strong> tab.
+        Contracts with renewal or review dates in the next 90 days (or overdue in the last 30) appear here.
+        Set renewal type and review dates on each vendor&apos;s <strong>Contracts</strong> tab — no need for
+        placeholder end dates on auto-renewing agreements.
       </p>
     </div>
   );

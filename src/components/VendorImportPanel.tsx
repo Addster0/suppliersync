@@ -329,7 +329,7 @@ export function VendorImportPanel({
                   <th>Category</th>
                   <th>Address</th>
                   <th>Contact</th>
-                  <th>Renewal</th>
+                  <th>Contract end (renewal)</th>
                 </tr>
               </thead>
               <tbody>

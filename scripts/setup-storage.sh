@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "SupplierSync — organization-files storage setup"
+echo ""
+echo "Symptoms when storage is misconfigured:"
+echo "  - Documents tab uploads fail or disappear after refresh"
+echo "  - Account → System status shows Document storage ✗"
+echo "  - Errors mention row-level security or permission denied"
+echo ""
+echo "Run BOTH steps in Supabase → SQL Editor (project bvrwyuwwxsruihkxeftm):"
+echo "  File: supabase/STORAGE_SETUP.sql"
+echo ""
+echo "========== STEP A — bucket =========="
+echo "insert into storage.buckets (id, name, public) values ('organization-files', 'organization-files', false) on conflict (id) do nothing;"
+echo ""
+echo "========== STEP B — policies (required for uploads) =========="
+cat supabase/STORAGE_SETUP.sql | sed -n '/drop policy if exists "Org members can read org files"/,$p' | grep -v '^--'
+echo ""
+echo "Dashboard shortcut:"
+echo "  1. Storage → Buckets → organization-files (private)"
+echo "  2. If uploads still fail, policies from Step B must match exactly"
+echo "     (is_org_member / can_write_org on storage.foldername(name)[1])"
+echo ""
+echo "Verify in the app:"
+echo "  Sign in → adele.inc workspace → Account → System status → Refresh"
+echo "  Document storage should show ✓ before testing uploads."
+echo ""
+echo "Local CLI check (anon key only — inconclusive for private buckets):"
+echo "  ./scripts/check-storage.sh"

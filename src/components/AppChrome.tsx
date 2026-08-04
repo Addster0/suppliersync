@@ -1,11 +1,15 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { fetchIsPlatformAdmin } from "../api/foundingApplication";
 import { BrandLogo } from "./BrandLogo";
-import { useAuth } from "../contexts/AuthContext";
+import { StorageSetupBanner } from "./StorageSetupBanner";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetupOptional } from "../contexts/SetupContext";
 
-type AppPath = "/app" | "/app/renewals" | "/app/billing" | "/app/account";
+import { getTrialDaysRemaining, isOnActiveTrial } from "../lib/stripe";
+import { ProfileMenu } from "./ProfileMenu";
+
+type AppPath = "/app" | "/app/renewals" | "/app/billing" | "/app/account" | "/outreach";
 
 function tabActive(pathname: string, path: AppPath) {
   if (path === "/app") {
@@ -15,13 +19,29 @@ function tabActive(pathname: string, path: AppPath) {
 }
 
 export function AppChrome({ children }: { children: ReactNode }) {
-  const { signOut, user } = useAuth();
   const { activeMembership, canWrite } = useOrganization();
   const setup = useSetupOptional();
   const { pathname } = useLocation();
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  useEffect(() => {
+    void fetchIsPlatformAdmin().then(setIsPlatformAdmin);
+  }, []);
+
+  const org = activeMembership?.organization;
+  const trialDaysRemaining =
+    org && isOnActiveTrial(org) ? getTrialDaysRemaining(org.trialEndsAt) : null;
 
   return (
     <div className="app-chrome">
+      {trialDaysRemaining != null && (
+        <div className="banner trial-banner">
+          <span>
+            Free trial · {trialDaysRemaining === 1 ? "1 day" : `${trialDaysRemaining} days`} left —{" "}
+            <Link to="/app/billing">subscribe</Link> before access ends.
+          </span>
+        </div>
+      )}
       <header className="app-topbar">
         <div className="app-topbar-brand">
           <BrandLogo variant="nav" linkTo="/app" />
@@ -52,6 +72,14 @@ export function AppChrome({ children }: { children: ReactNode }) {
           >
             Account
           </Link>
+          {isPlatformAdmin && (
+            <Link
+              className={`app-topbar-tab outreach-nav-tab${tabActive(pathname, "/outreach") ? " is-active" : ""}`}
+              to="/outreach"
+            >
+              Outreach
+            </Link>
+          )}
         </nav>
 
         <div className="app-topbar-actions">
@@ -60,14 +88,10 @@ export function AppChrome({ children }: { children: ReactNode }) {
               Setup · {setup.completedCount}/{setup.totalSteps}
             </button>
           )}
-          <span className="app-topbar-email" title={user?.email ?? ""}>
-            {user?.email}
-          </span>
-          <button type="button" className="secondary app-topbar-signout" onClick={() => void signOut()}>
-            Sign out
-          </button>
+          <ProfileMenu />
         </div>
       </header>
+      <StorageSetupBanner />
       {children}
     </div>
   );

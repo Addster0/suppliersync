@@ -1,13 +1,30 @@
 import type { FileAttachment } from "../types";
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+/** orgId/vendorId/filename — no path traversal, no extra segments */
+export const STORAGE_OBJECT_PATH_PATTERN = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[^/]+$/;
+
+const BLOCKED_UPLOAD_MIME_TYPES = new Set(["text/html", "image/svg+xml"]);
+
 export const ACCEPTED_FILE_TYPES =
-  ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,application/pdf,image/*";
+  ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/gif,image/webp,text/plain,text/csv";
 
 export function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function assertAllowedUploadMime(file: File) {
+  const mime = (file.type || "").toLowerCase();
+  if (BLOCKED_UPLOAD_MIME_TYPES.has(mime)) {
+    throw new Error(`"${file.name}" file type is not allowed.`);
+  }
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".html") || lowerName.endsWith(".htm") || lowerName.endsWith(".svg")) {
+    throw new Error(`"${file.name}" file type is not allowed.`);
+  }
 }
 
 export function readFileAsDataUrl(file: File): Promise<string> {
@@ -20,6 +37,7 @@ export function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export async function fileToAttachment(file: File): Promise<FileAttachment> {
+  assertAllowedUploadMime(file);
   if (file.size > MAX_FILE_BYTES) {
     throw new Error(
       `"${file.name}" is ${formatFileSize(file.size)}. Maximum ${formatFileSize(MAX_FILE_BYTES)} per file.`
@@ -33,33 +51,67 @@ export async function fileToAttachment(file: File): Promise<FileAttachment> {
   };
 }
 
+function storagePathFromSignedUrl(fileUrl: string): string | null {
+  const storageMatch = fileUrl.match(
+    /\/storage\/v1\/object\/(?:sign|public)\/organization-files\/([^?]+)/
+  );
+  if (!storageMatch) return null;
+
+  const path = decodeURIComponent(storageMatch[1]);
+  if (path.includes("..") || !STORAGE_OBJECT_PATH_PATTERN.test(path)) return null;
+  return path;
+}
+
+export function parseStorageFileUrl(fileUrl: string): string | null {
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("sb://")) {
+    const path = trimmed.slice(5);
+    if (path.includes("..") || !STORAGE_OBJECT_PATH_PATTERN.test(path)) return null;
+    return `sb://${path}`;
+  }
+
+  const signedPath = storagePathFromSignedUrl(trimmed);
+  if (signedPath) return `sb://${signedPath}`;
+
+  if (!trimmed.includes("://") && trimmed.includes("/")) {
+    const path = trimmed.replace(/^\/+/, "");
+    if (path.includes("..") || !STORAGE_OBJECT_PATH_PATTERN.test(path)) return null;
+    return `sb://${path}`;
+  }
+
+  return null;
+}
+
+export function assertValidStorageFileUrl(fileUrl: string): string {
+  const parsed = parseStorageFileUrl(fileUrl);
+  if (!parsed) {
+    throw new Error("File URL must be an internal storage path (sb://).");
+  }
+  return parsed;
+}
+
+export function getStoragePathFromFileUrl(fileUrl: string): string {
+  const parsed = assertValidStorageFileUrl(fileUrl);
+  return parsed.slice(5);
+}
+
 export function normalizeStorageFileUrl(fileUrl: string) {
   const trimmed = fileUrl.trim();
   if (!trimmed) return trimmed;
-  if (trimmed.startsWith("sb://") || trimmed.startsWith("data:")) return trimmed;
 
-  const storageMatch = trimmed.match(
-    /\/storage\/v1\/object\/(?:sign|public)\/organization-files\/([^?]+)/
-  );
-  if (storageMatch) {
-    return `sb://${decodeURIComponent(storageMatch[1])}`;
-  }
+  const parsed = parseStorageFileUrl(trimmed);
+  if (parsed) return parsed;
 
-  if (!trimmed.includes("://") && trimmed.includes("/")) {
-    return `sb://${trimmed.replace(/^\/+/, "")}`;
-  }
+  if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) return trimmed;
 
   return trimmed;
 }
 
 export function isDirectPreviewUrl(fileUrl: string) {
   const normalized = normalizeStorageFileUrl(fileUrl);
-  return (
-    normalized.startsWith("blob:") ||
-    normalized.startsWith("data:") ||
-    normalized.startsWith("http://") ||
-    normalized.startsWith("https://")
-  );
+  return normalized.startsWith("blob:") || normalized.startsWith("data:");
 }
 
 export function hasDownloadableFile(fileUrl: string) {
@@ -68,6 +120,7 @@ export function hasDownloadableFile(fileUrl: string) {
 }
 
 export function localFileToAttachment(file: File): FileAttachment {
+  assertAllowedUploadMime(file);
   return {
     fileName: file.name,
     fileSize: file.size,

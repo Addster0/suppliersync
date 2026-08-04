@@ -106,6 +106,96 @@ button, input, textarea, select { font: inherit; }
   font-size: 13px;
 }
 
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.profile-menu-trigger:hover,
+.profile-menu-trigger[aria-expanded="true"] {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.profile-menu-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1d4ed8;
+  letter-spacing: 0.02em;
+}
+
+.profile-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 300;
+  min-width: 220px;
+  padding: 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+}
+
+.profile-menu-email {
+  margin: 0;
+  padding: 8px 10px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  word-break: break-all;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.profile-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.profile-menu-item:hover {
+  background: #f1f5f9;
+  color: #1d4ed8;
+}
+
+.profile-menu-signout {
+  margin-top: 4px;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  color: #b91c1c;
+}
+
+.profile-menu-signout:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .shell {
   min-height: 0;
   flex: 1;
@@ -392,6 +482,50 @@ button:disabled:hover {
   color: #475569;
 }
 
+.vendor-button-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vendor-sample-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.vendor-sample-badge--inline {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.sample-vendors-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #78350f;
+}
+
+.sample-vendors-banner strong {
+  font-weight: 600;
+}
+
+.setup-sample-hint {
+  margin-top: 8px;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -478,6 +612,7 @@ button:disabled:hover {
 
 .card.highlight { background: #eff6ff; border-color: #bfdbfe; }
 .card.highlight strong { font-size: 26px; }
+.spend-prefill-card { margin-top: 12px; border-width: 2px; }
 
 .tabs {
   display: grid;
@@ -512,6 +647,13 @@ button:disabled:hover {
 }
 .form-grid textarea { grid-column: span 2; }
 .form-grid button { min-height: 48px; }
+.contract-edit-form__title { grid-column: 1 / -1; margin: 0; }
+.contract-edit-form__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 
 .row {
   display: flex;
@@ -706,6 +848,45 @@ a.file-attachment-link:hover {
   font-size: 14px;
 }
 
+.contract-extract-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 14px;
+}
+
+.contract-extract-status--error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.contract-extract-status--loading {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e3a5f;
+}
+
+.contract-extract-status--info {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.contract-extract-status__message {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.contract-extract-status code {
+  font-size: 13px;
+}
+
 /* Auth pages — matches marketing homepage */
 .auth-layout {
   min-height: 100vh;
@@ -804,6 +985,22 @@ a.file-attachment-link:hover {
   color: #475569;
 }
 
+.auth-inline-link {
+  margin: -4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.auth-inline-link a {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.auth-inline-link a:hover {
+  text-decoration: underline;
+}
+
 .auth-submit {
   margin-top: 4px;
   width: 100%;
@@ -863,6 +1060,20 @@ a.file-attachment-link:hover {
   text-decoration: underline;
 }
 
+.auth-text-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: #1d4ed8;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-text-button:hover {
+  text-decoration: underline;
+}
+
 /* Billing & account (single-column under top bar) */
 .billing-shell,
 .account-shell {
@@ -881,6 +1092,61 @@ a.file-attachment-link:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.system-health-panel {
+  grid-column: 1 / -1;
+}
+
+.system-health-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.system-health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.system-health-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.system-health-marker {
+  flex-shrink: 0;
+  width: 1.25rem;
+  font-weight: 800;
+}
+
+.system-health-list .is-ok .system-health-marker {
+  color: #15803d;
+}
+
+.system-health-list .is-error .system-health-marker {
+  color: #b91c1c;
+}
+
+.system-health-sql {
+  margin-top: 14px;
+}
+
+.system-health-sql pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .account-form {
@@ -1077,6 +1343,18 @@ a.file-attachment-link:hover {
   gap: 6px;
 }
 
+.field-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-inline input[type="date"] {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
 .renewals-summary--compact {
   padding: 16px 18px;
 }
@@ -1150,6 +1428,37 @@ a.file-attachment-link:hover {
 .renewal-row--soon {
   border-color: #fed7aa;
   background: #fffaf5;
+}
+
+.renewal-row--handled {
+  border-color: #bbf7d0;
+  background: #f8fff9;
+}
+
+.renewal-row-actions {
+  padding: 0 4px 8px;
+}
+
+.renewal-handle-form {
+  display: grid;
+  gap: 10px;
+  padding: 0 4px 8px;
+  max-width: 420px;
+}
+
+.renewal-handle-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.renewal-handle-button {
+  font-size: 13px;
+}
+
+.renewal-row-error {
+  padding: 0 4px 8px;
+  margin: 0;
 }
 
 .renewal-row-main {
@@ -1735,6 +2044,47 @@ a.file-attachment-link:hover {
   border-color: #1d4ed8;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.item-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.item-filter-chip {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.item-filter-chip.is-selected {
+  border-color: #1d4ed8;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.row-title-with-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lifecycle-badge--new {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.lifecycle-badge--expired {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .setup-vendors-hero {
@@ -3661,6 +4011,17 @@ button.doc-title-button {
 button.doc-title-button:hover {
   color: #1d4ed8;
   text-decoration: underline;
+}
+
+.doc-summary {
+  margin-top: 6px;
+  font-style: italic;
+}
+
+.doc-read-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
 }
 
 .outreach-modal-backdrop {

@@ -8,12 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { isSupabaseConfigured, requireSupabase } from "../lib/supabase";
+import {
+  formatSupabaseAuthError,
+  getPasswordResetRedirectUrl,
+  isSupabaseConfigured,
+  requireSupabase,
+} from "../lib/supabase";
 
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  recoveryMode: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (
     email: string,
@@ -21,6 +27,8 @@ type AuthContextValue = {
     fullName: string,
     terms: { version: string; acceptedAt: string }
   ) => Promise<{ error: string | null }>;
+  requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -29,6 +37,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -42,11 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.auth.getSession().then(({ data }) => {
       if (mounted) {
         setSession(data.session);
+        if (window.location.pathname === "/reset-password" && window.location.hash.includes("type=recovery")) {
+          setRecoveryMode(true);
+        }
         setLoading(false);
       }
     });
 
-    const { data: subscription } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscription } = client.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
       setSession(nextSession);
       setLoading(false);
     });
@@ -58,8 +73,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await requireSupabase().auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    try {
+      const { error } = await requireSupabase().auth.signInWithPassword({ email, password });
+      return { error: error ? formatSupabaseAuthError(error) : null };
+    } catch (error) {
+      return { error: formatSupabaseAuthError(error) };
+    }
   }, []);
 
   const signUp = useCallback(
@@ -69,23 +88,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName: string,
       terms: { version: string; acceptedAt: string }
     ) => {
-      const { error } = await requireSupabase().auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            terms_version: terms.version,
-            terms_accepted_at: terms.acceptedAt,
+      try {
+        const { error } = await requireSupabase().auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              terms_version: terms.version,
+              terms_accepted_at: terms.acceptedAt,
+            },
           },
-        },
-      });
-      return { error: error?.message ?? null };
+        });
+        return { error: error ? formatSupabaseAuthError(error) : null };
+      } catch (error) {
+        return { error: formatSupabaseAuthError(error) };
+      }
     },
     []
   );
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    try {
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(email, {
+        redirectTo: getPasswordResetRedirectUrl(),
+      });
+      return { error: error ? formatSupabaseAuthError(error) : null };
+    } catch (error) {
+      return { error: formatSupabaseAuthError(error) };
+    }
+  }, []);
+
+  const updatePassword = useCallback(async (password: string) => {
+    try {
+      const { error } = await requireSupabase().auth.updateUser({ password });
+      if (!error) setRecoveryMode(false);
+      return { error: error ? formatSupabaseAuthError(error) : null };
+    } catch (error) {
+      return { error: formatSupabaseAuthError(error) };
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
+    setRecoveryMode(false);
     await requireSupabase().auth.signOut();
   }, []);
 
@@ -94,11 +139,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       loading,
+      recoveryMode,
       signIn,
       signUp,
+      requestPasswordReset,
+      updatePassword,
       signOut,
     }),
-    [session, loading, signIn, signUp, signOut]
+    [session, loading, recoveryMode, signIn, signUp, requestPasswordReset, updatePassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

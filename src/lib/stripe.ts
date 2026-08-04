@@ -1,8 +1,9 @@
-import { requireSupabase } from "./supabase";
+import { requireSupabase, isSupabaseConfigValid } from "./supabase";
 import type { Organization } from "../types";
 
 /** First N clinics get founding rate; locked in DB while subscribed. */
 export const MAX_FOUNDING_CLINICS = 5;
+export const TRIAL_DAYS = 14;
 /** Design partner / first charter clinic — set manually in Supabase, not auto-assigned. */
 export const CHARTER_PRICE_CENTS = 4900;
 export const FOUNDING_PRICE_CENTS = 7900;
@@ -64,6 +65,8 @@ export function getCheckoutPaymentLink(org: Organization | null | undefined): st
 }
 
 export function isStripeConfigured() {
+  // Checkout and portal run via Supabase edge functions when Stripe secrets are set.
+  if (isSupabaseConfigValid) return true;
   return Boolean(
     charterLink?.trim() ||
       foundingLink?.trim() ||
@@ -73,8 +76,34 @@ export function isStripeConfigured() {
   );
 }
 
-export function isSubscriptionActive(status: string) {
-  return status === "active" || status === "trialing";
+type SubscriptionOrg = Pick<Organization, "subscriptionStatus" | "trialEndsAt">;
+
+export function getTrialDaysRemaining(trialEndsAt: string | null): number | null {
+  if (!trialEndsAt) return null;
+  const ms = new Date(trialEndsAt).getTime() - Date.now();
+  if (ms <= 0) return 0;
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
+
+export function isTrialExpired(org: SubscriptionOrg) {
+  return org.subscriptionStatus === "trialing" && getTrialDaysRemaining(org.trialEndsAt) === 0;
+}
+
+export function isOnActiveTrial(org: SubscriptionOrg) {
+  return org.subscriptionStatus === "trialing" && isSubscriptionActive(org);
+}
+
+export function isSubscriptionActive(org: SubscriptionOrg) {
+  if (org.subscriptionStatus === "active") return true;
+  if (org.subscriptionStatus === "trialing") {
+    if (!org.trialEndsAt) return true;
+    return new Date(org.trialEndsAt) > new Date();
+  }
+  return false;
+}
+
+export function isPastDue(org: SubscriptionOrg) {
+  return org.subscriptionStatus === "past_due";
 }
 
 export function getPlanLabel(org: Organization) {

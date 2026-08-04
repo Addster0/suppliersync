@@ -25,6 +25,75 @@ const OrganizationContext = createContext<OrganizationContextValue | null>(null)
 
 const WRITE_ROLES: OrgRole[] = ["owner", "admin", "member"];
 
+const ORG_SELECT_CORE = `
+  id,
+  name,
+  plan,
+  subscription_status,
+  is_founding,
+  locked_monthly_price_cents,
+  founding_enrolled_at,
+  renewal_reminders_enabled,
+  weekly_digest_enabled
+`;
+
+const ORG_SELECT_WITH_TRIAL = `
+  ${ORG_SELECT_CORE.trim()},
+  trial_ends_at
+`;
+
+type OrganizationRow = {
+  id: string;
+  name: string;
+  plan: string;
+  subscription_status: string;
+  trial_ends_at?: string | null;
+  is_founding: boolean;
+  locked_monthly_price_cents: number | null;
+  founding_enrolled_at: string | null;
+  renewal_reminders_enabled: boolean;
+  weekly_digest_enabled: boolean;
+};
+
+function isMissingColumnError(error: { code?: string; message?: string }) {
+  return error.code === "42703" || /column .+ does not exist/i.test(error.message ?? "");
+}
+
+function mapMembershipRows(data: unknown[]) {
+  return data.flatMap((row) => {
+    const member = row as {
+      id: string;
+      role: string;
+      organization_id: string;
+      organizations: OrganizationRow | OrganizationRow[] | null;
+    };
+
+    const org = member.organizations;
+    const organization = Array.isArray(org) ? org[0] : org;
+    if (!organization) return [];
+
+    return [
+      {
+        id: member.id,
+        organizationId: member.organization_id,
+        role: member.role as OrgRole,
+        organization: {
+          id: organization.id,
+          name: organization.name,
+          plan: organization.plan,
+          subscriptionStatus: organization.subscription_status,
+          trialEndsAt: organization.trial_ends_at ?? null,
+          isFounding: organization.is_founding,
+          lockedMonthlyPriceCents: organization.locked_monthly_price_cents,
+          foundingEnrolledAt: organization.founding_enrolled_at,
+          renewalRemindersEnabled: organization.renewal_reminders_enabled ?? true,
+          weeklyDigestEnabled: organization.weekly_digest_enabled ?? true,
+        },
+      },
+    ];
+  });
+}
+
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
@@ -41,27 +110,24 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     const client = requireSupabase();
-    const { data, error } = await client
-      .from("organization_members")
-      .select(
-        `
+    const memberSelect = (orgFields: string) => `
         id,
         role,
         organization_id,
-        organizations (
-          id,
-          name,
-          plan,
-          subscription_status,
-          is_founding,
-          locked_monthly_price_cents,
-          founding_enrolled_at,
-          renewal_reminders_enabled,
-          weekly_digest_enabled
-        )
-      `
-      )
+        organizations (${orgFields})
+      `;
+
+    let { data, error } = await client
+      .from("organization_members")
+      .select(memberSelect(ORG_SELECT_WITH_TRIAL))
       .eq("user_id", user.id);
+
+    if (error && isMissingColumnError(error)) {
+      ({ data, error } = await client
+        .from("organization_members")
+        .select(memberSelect(ORG_SELECT_CORE))
+        .eq("user_id", user.id));
+    }
 
     if (error) {
       console.error(error);
@@ -70,54 +136,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const mapped: OrganizationMembership[] = (data ?? []).flatMap((row) => {
-      const org = row.organizations as
-        | {
-            id: string;
-            name: string;
-            plan: string;
-            subscription_status: string;
-            is_founding: boolean;
-            locked_monthly_price_cents: number | null;
-            founding_enrolled_at: string | null;
-            renewal_reminders_enabled: boolean;
-            weekly_digest_enabled: boolean;
-          }
-        | {
-            id: string;
-            name: string;
-            plan: string;
-            subscription_status: string;
-            is_founding: boolean;
-            locked_monthly_price_cents: number | null;
-            founding_enrolled_at: string | null;
-            renewal_reminders_enabled: boolean;
-            weekly_digest_enabled: boolean;
-          }[]
-        | null;
-
-      const organization = Array.isArray(org) ? org[0] : org;
-      if (!organization) return [];
-
-      return [
-        {
-          id: row.id,
-          organizationId: row.organization_id,
-          role: row.role as OrgRole,
-          organization: {
-            id: organization.id,
-            name: organization.name,
-            plan: organization.plan,
-            subscriptionStatus: organization.subscription_status,
-            isFounding: organization.is_founding,
-            lockedMonthlyPriceCents: organization.locked_monthly_price_cents,
-            foundingEnrolledAt: organization.founding_enrolled_at,
-            renewalRemindersEnabled: organization.renewal_reminders_enabled ?? true,
-            weeklyDigestEnabled: organization.weekly_digest_enabled ?? true,
-          },
-        },
-      ];
-    });
+    const mapped: OrganizationMembership[] = mapMembershipRows(data ?? []);
 
     setMemberships(mapped);
 
