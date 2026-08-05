@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /login
+Allow: /signup
+Allow: /privacy
+Allow: /terms
+Disallow: /app
+Disallow: /outreach
+
+Sitemap: https://suppliersync.org/sitemap.xml
