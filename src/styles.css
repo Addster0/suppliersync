@@ -341,8 +341,30 @@ button:disabled:hover {
   transform: none;
 }
 
-.secondary { background: #e2e8f0; color: #172033; }
-.secondary:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+.secondary {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+.secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  opacity: 0.94;
+}
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+.secondary:disabled:hover {
+  opacity: 0.55;
+  transform: none;
+}
+.secondary.outreach-delete-btn {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.secondary.outreach-delete-btn:hover:not(:disabled) {
+  opacity: 0.94;
+}
 .full { width: 100%; }
 
 .app-nav {
@@ -3038,13 +3060,29 @@ a.file-attachment-link:hover {
 }
 
 .marketing-button.secondary {
-  background: #e2e8f0;
-  color: var(--m-ink);
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.22);
 }
 
 .marketing-button.secondary.light {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: #1d4ed8;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.22);
+}
+
+.marketing-cta .marketing-button.secondary,
+.marketing-cta .marketing-button.secondary.light {
+  background: transparent;
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+.marketing-cta .marketing-button.secondary:hover,
+.marketing-cta .marketing-button.secondary.light:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .marketing-trust {
@@ -4290,7 +4328,6 @@ button.doc-title-button:hover {
 
 .outreach-delete-btn {
   margin-top: 12px;
-  color: #b91c1c;
 }
 
 @media (max-width: 900px) {
