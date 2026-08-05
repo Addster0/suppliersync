@@ -52,11 +52,7 @@ All reference `organizations(id) ON DELETE CASCADE` unless noted:
 
 ### Operational logs
 
-- **`api_usage_log`** — org_id, endpoint, user_id, created_at. Comment in migration 028: *"Rows older than 7 days can be purged by cron."* **No cron is configured.**
-
-  ```sql
-  delete from public.api_usage_log where created_at < now() - interval '7 days';
-  ```
+- **`api_usage_log`** — org_id, endpoint, user_id, created_at. Comment in migration 028: *"Rows older than 7 days can be purged by cron."* Purge via `purge_old_api_usage_log()` (migration 029); schedule daily with pg_cron (see [Scheduled jobs](#scheduled-jobs)).
 
 - **`renewal_reminder_log`** — org_id, contract_id, reminder_window, sent_at. Dedupes sends; grows ~4 rows/contract/lifetime.
 - **`workspace_digest_log`** — org_id, digest_week, sent_at. One row per org per digest week.
@@ -107,11 +103,15 @@ Blockers: owning a workspace with other members (transfer ownership or delete wo
 
 ## Scheduled jobs
 
-### `api_usage_log` purge (migration 029)
+### `api_usage_log` purge (migrations 028 + 029)
 
-Function: `public.purge_old_api_usage_log()` — deletes rows older than 7 days; returns deleted row count. Granted to `service_role` only.
+Requires migration **028** (`api_usage_log` table) and **029** (`purge_old_api_usage_log()`). Function deletes rows older than 7 days and returns deleted row count. Granted to `service_role` only (pg_cron runs as `postgres` and can call it).
 
-**pg_cron** (if enabled on your Supabase project):
+**One-time setup** (Supabase Dashboard → SQL Editor):
+
+1. Verify `public.api_usage_log` and `public.purge_old_api_usage_log()` exist (if migration 028 missing, apply `028_abuse_prevention.sql` first).
+2. Enable **pg_cron** (Dashboard → Database → Extensions, or `create extension if not exists pg_cron;`).
+3. Schedule daily at 03:00 UTC:
 
 ```sql
 select cron.schedule(
@@ -121,7 +121,9 @@ select cron.schedule(
 );
 ```
 
-**Manual** (SQL Editor or ops runbook):
+4. Confirm row in `cron.job` where `jobname = 'purge-api-usage-log'`.
+
+**Manual test** (SQL Editor):
 
 ```sql
 select public.purge_old_api_usage_log();
