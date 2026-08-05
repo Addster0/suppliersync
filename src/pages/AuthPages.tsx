@@ -733,7 +733,7 @@ export function SubscriptionBlockedPage() {
             ? "Your 14-day free trial has ended. Subscribe to restore access for your team."
             : "Your clinic subscription is inactive. Update billing to restore access for your team."}
         </p>
-        <Link className="marketing-button primary auth-submit-link" to="/app/billing">
+        <Link className="marketing-button primary auth-submit-link" to="/app/account?section=billing">
           {trialExpired ? "Subscribe now" : "Manage billing"}
         </Link>
         <Link className="marketing-button secondary auth-submit-link" to="/app/account">

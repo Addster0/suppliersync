@@ -27,7 +27,7 @@ export function OutreachChrome({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="app-topbar-actions">
-          <ProfileMenu showBilling={false} />
+          <ProfileMenu />
         </div>
       </header>
       {children}

@@ -1147,14 +1147,87 @@ a.file-attachment-link:hover {
   margin: 0 auto;
 }
 
-.account-grid {
+.account-settings {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.account-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  position: sticky;
+  top: 96px;
+}
+
+.account-settings-nav button {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-settings-nav button:hover {
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.account-settings-nav button.is-active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.account-settings-nav button.danger-nav {
+  color: #b91c1c;
+}
+
+.account-settings-nav button.danger-nav.is-active {
+  color: #b91c1c;
+}
+
+.account-settings-panel {
+  min-width: 0;
+}
+
+.account-settings-section h2 {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+
+.account-settings-section .section-lead {
+  margin: 0 0 18px;
+}
+
+.billing-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+
+.billing-settings-section > .card,
+.billing-settings-section > .notice,
+.billing-settings-section > article {
+  margin-bottom: 16px;
 }
 
 .system-health-panel {
-  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .system-health-panel__head {
@@ -2254,12 +2327,7 @@ a.file-attachment-link:hover {
   margin-top: 10px;
 }
 
-.account-data-section {
-  grid-column: 1 / -1;
-}
-
 .account-danger-zone {
-  grid-column: 1 / -1;
   border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, var(--border, #ddd));
 }
 
@@ -3697,8 +3765,22 @@ a.file-attachment-link:hover {
   .billing-plans {
     grid-template-columns: 1fr;
   }
-  .account-grid {
+  .account-settings {
     grid-template-columns: 1fr;
+  }
+
+  .account-settings-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    position: static;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-settings-nav button {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
   }
   .app-topbar-tabs {
     order: 3;

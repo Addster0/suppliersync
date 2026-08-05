@@ -57,7 +57,7 @@ export function AdminSignupsPage() {
               <code>scripts/setup-signup-notify.sh</code>.
             </p>
           </div>
-          <Link className="marketing-button secondary" to="/app/billing">
+          <Link className="marketing-button secondary" to="/app/account?section=billing">
             Back to billing
           </Link>
         </header>

@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { createCheckoutSession, createPortalSession } from "../api/billing";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { fetchIsPlatformAdmin } from "../api/foundingApplication";
-import { MAIN_CONTENT_ID } from "../lib/a11y";
 import {
   FoundingApplicationAdminPanel,
   FoundingApplicationSection,
@@ -29,7 +28,7 @@ import {
 const CHECKOUT_POLL_MS = 2000;
 const CHECKOUT_POLL_MAX_ATTEMPTS = 30;
 
-export function BillingPage() {
+export function BillingSection() {
   const { activeMembership, refreshMemberships } = useOrganization();
   const org = activeMembership?.organization;
   const organizationId = activeMembership?.organizationId ?? "";
@@ -136,18 +135,18 @@ export function BillingPage() {
     canManage && (active || pastDue || Boolean(STRIPE_PORTAL_URL));
 
   return (
-    <main className="shell billing-shell" id={MAIN_CONTENT_ID}>
-      <section className="content billing-content-wide">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Billing</p>
-            <h1>Clinic subscription</h1>
-            <p className="muted">Manage your SupplierSync plan for {org?.name ?? "this workspace"}.</p>
-          </div>
-          <span className={`badge ${active ? "active" : pastDue ? "pending" : "expired"}`}>
-            {pastDue ? "past due" : status}
-          </span>
-        </header>
+    <div className="account-settings-section billing-settings-section">
+      <header className="billing-section-header">
+        <div>
+          <h2>Billing & plan</h2>
+          <p className="muted small section-lead">
+            Manage your SupplierSync plan for {org?.name ?? "this workspace"}.
+          </p>
+        </div>
+        <span className={`badge ${active ? "active" : pastDue ? "pending" : "expired"}`}>
+          {pastDue ? "past due" : status}
+        </span>
+      </header>
 
         {processingPayment && (
           <div className="notice billing-notice billing-notice--processing" role="status" aria-live="polite">
@@ -296,7 +295,6 @@ export function BillingPage() {
             </p>
           )}
         </article>
-      </section>
-    </main>
+    </div>
   );
 }

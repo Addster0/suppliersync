@@ -10,7 +10,7 @@ import { getTrialDaysRemaining, isOnActiveTrial } from "../lib/stripe";
 import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { ProfileMenu } from "./ProfileMenu";
 
-type AppPath = "/app" | "/app/renewals" | "/app/billing" | "/app/account" | "/outreach";
+type AppPath = "/app" | "/app/renewals" | "/app/account" | "/outreach";
 
 function tabActive(pathname: string, path: AppPath) {
   if (path === "/app") {
@@ -42,7 +42,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
         <div className="banner trial-banner">
           <span>
             Free trial · {trialDaysRemaining === 1 ? "1 day" : `${trialDaysRemaining} days`} left —{" "}
-            <Link to="/app/billing">subscribe</Link> before access ends.
+            <Link to="/app/account?section=billing">subscribe</Link> before access ends.
           </span>
         </div>
       )}
@@ -68,13 +68,6 @@ export function AppChrome({ children }: { children: ReactNode }) {
             to="/app/renewals"
           >
             Renewals
-          </Link>
-          <Link
-            aria-current={tabActive(pathname, "/app/billing") ? "page" : undefined}
-            className={`app-topbar-tab${tabActive(pathname, "/app/billing") ? " is-active" : ""}`}
-            to="/app/billing"
-          >
-            Billing
           </Link>
           <Link
             aria-current={tabActive(pathname, "/app/account") ? "page" : undefined}

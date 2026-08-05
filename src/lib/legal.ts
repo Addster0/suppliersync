@@ -185,7 +185,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: "9. Your choices",
     paragraphs: [
       "You may access and update profile information in the app. Workspace owners control clinic records inside their workspace.",
-      "Workspace owners may export workspace data (vendor records, contacts, contract and document metadata, spend, and evaluations) as JSON from Account settings.",
+      "Workspace owners may export a portable copy of workspace data from Account settings. Exports are delivered as a standard JSON file you can open in any web browser, text editor, or spreadsheet tool — no Adobe Acrobat, Microsoft Word, or other special software is required to read your exported records.",
+      "Exports include vendor records, contacts, contract and document metadata, spend entries, and evaluations. Uploaded PDF files are not included as binary attachments; only file names, sizes, and related metadata are exported.",
       "You may delete your entire account or an owned workspace from Account settings. Deletion removes data from active systems; backups may retain copies briefly as described above.",
       "You may opt out of non-essential emails where the product provides controls (for example, report email settings).",
       "Contact us at legal@suppliersync.org for additional export or deletion assistance.",

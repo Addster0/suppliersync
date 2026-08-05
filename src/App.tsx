@@ -24,7 +24,6 @@ import {
 } from "./pages/AuthPages";
 import { AccountPage } from "./pages/AccountPage";
 import { AppLayout } from "./pages/AppLayout";
-import { BillingPage } from "./pages/BillingPage";
 import { HomePage } from "./pages/HomePage";
 import { AboutPage } from "./pages/AboutPage";
 import { PrivacyPage, TermsPage } from "./pages/LegalPages";
@@ -45,6 +44,30 @@ function LoadingScreen() {
   );
 }
 
+function RobotsMeta() {
+  const { pathname } = useLocation();
+  const noindex = pathname.startsWith("/app") || pathname.startsWith("/outreach");
+
+  useEffect(() => {
+    const metaName = "robots";
+    let meta = document.querySelector(`meta[name="${metaName}"]`) as HTMLMetaElement | null;
+
+    if (noindex) {
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = metaName;
+        document.head.appendChild(meta);
+      }
+      meta.content = "noindex, nofollow";
+      return;
+    }
+
+    meta?.remove();
+  }, [noindex]);
+
+  return null;
+}
+
 function isBillingPath(pathname: string) {
   return pathname === "/app/billing" || pathname.endsWith("/app/billing");
 }
@@ -55,6 +78,14 @@ function isAccountPath(pathname: string) {
 
 function isSubscriptionExemptPath(pathname: string) {
   return isBillingPath(pathname) || isAccountPath(pathname);
+}
+
+function BillingRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("section", "billing");
+  const query = params.toString();
+  return <Navigate to={query ? `/app/account?${query}` : "/app/account?section=billing"} replace />;
 }
 
 function AuthenticatedGate() {
@@ -168,7 +199,7 @@ function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route index element={<VendorWorkspace />} />
           <Route path="renewals" element={<RenewalsPage />} />
-          <Route path="billing" element={<BillingPage />} />
+          <Route path="billing" element={<BillingRedirect />} />
           <Route path="admin/signups" element={<AdminSignupsPage />} />
           <Route path="account" element={<AccountPage />} />
         </Route>
@@ -213,6 +244,7 @@ export default function App() {
   return (
     <SupabaseConnectionGate>
       <AuthProvider>
+        <RobotsMeta />
         <AppRoutes />
       </AuthProvider>
     </SupabaseConnectionGate>

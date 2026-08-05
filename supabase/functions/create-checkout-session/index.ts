@@ -153,8 +153,8 @@ Deno.serve(async (req) => {
     subscription_data: {
       metadata: { organization_id: organizationId },
     },
-    success_url: `${appUrl}/app/billing?checkout=success`,
-    cancel_url: `${appUrl}/app/billing?checkout=canceled`,
+    success_url: `${appUrl}/app/account?section=billing&checkout=success`,
+    cancel_url: `${appUrl}/app/account?section=billing&checkout=canceled`,
     allow_promotion_codes: true,
   };
 

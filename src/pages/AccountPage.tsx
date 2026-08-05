@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useId, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { deleteAccount, deleteOrganization } from "../api/account";
 import { downloadOrganizationExport, exportOrganizationData } from "../api/export";
 import { fetchIsPlatformAdmin } from "../api/foundingApplication";
@@ -8,6 +8,7 @@ import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetup } from "../contexts/SetupContext";
 import { LegalFooter } from "../components/LegalFooter";
 import { SystemHealthPanel } from "../components/SystemHealthPanel";
+import { BillingSection } from "./BillingPage";
 import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { TERMS_VERSION } from "../lib/legal";
 import { formatMonthlyPrice, getLockedPriceCents, getPlanLabel, getTrialDaysRemaining, isOnActiveTrial, isSubscriptionActive } from "../lib/stripe";
@@ -17,8 +18,21 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+type AccountSection = "profile" | "workspace" | "billing" | "data" | "legal" | "system" | "danger";
+
+const ACCOUNT_SECTIONS: AccountSection[] = ["profile", "workspace", "billing", "data", "legal", "system", "danger"];
+
+function parseAccountSection(value: string | null): AccountSection | null {
+  if (value && ACCOUNT_SECTIONS.includes(value as AccountSection)) {
+    return value as AccountSection;
+  }
+  return null;
+}
+
 export function AccountPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sectionFromUrl = parseAccountSection(searchParams.get("section"));
   const { user, signOut } = useAuth();
   const { activeMembership, memberships, refreshMemberships } = useOrganization();
   const { isComplete, completedCount, totalSteps, openSetup } = useSetup();
@@ -36,6 +50,7 @@ export function AccountPage() {
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [activeSection, setActiveSection] = useState<AccountSection>(sectionFromUrl ?? "profile");
   const fullNameId = useId();
   const renewalEmailId = useId();
   const deleteOrgConfirmId = useId();
@@ -192,144 +207,197 @@ export function AccountPage() {
 
   const subscriptionStatus = org?.subscriptionStatus ?? "trialing";
 
+  const navSections = useMemo(() => {
+    const items: { id: AccountSection; label: string; danger?: boolean }[] = [
+      { id: "profile", label: "Profile" },
+      { id: "workspace", label: "Workspace" },
+      { id: "billing", label: "Billing & plan" },
+    ];
+    if (isOwner && org) {
+      items.push({ id: "data", label: "Your data" });
+    }
+    items.push({ id: "legal", label: "Legal" });
+    if (isPlatformAdmin) {
+      items.push({ id: "system", label: "System status" });
+    }
+    items.push({ id: "danger", label: "Danger zone", danger: true });
+    return items;
+  }, [isOwner, org, isPlatformAdmin]);
+
+  const selectSection = useCallback(
+    (section: AccountSection) => {
+      setActiveSection(section);
+      const next = new URLSearchParams(searchParams);
+      if (section === "profile") {
+        next.delete("section");
+      } else {
+        next.set("section", section);
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  useEffect(() => {
+    if (sectionFromUrl && sectionFromUrl !== activeSection) {
+      setActiveSection(sectionFromUrl);
+    }
+  }, [sectionFromUrl, activeSection]);
+
+  useEffect(() => {
+    if (!navSections.some((section) => section.id === activeSection)) {
+      selectSection(navSections[0]?.id ?? "profile");
+    }
+  }, [navSections, activeSection, selectSection]);
+
   return (
     <main className="shell account-shell" id={MAIN_CONTENT_ID}>
-        <section className="content account-content">
-          <header className="topbar">
-            <div>
-              <p className="eyebrow">My account</p>
-              <h1>Your profile & workspace</h1>
-              <p className="muted">Signed-in user settings for SupplierSync.</p>
-            </div>
-          </header>
+      <section className="content account-content">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h1>Account</h1>
+            <p className="muted">Manage your profile, workspace, and data.</p>
+          </div>
+        </header>
 
-          {message && (
-            <div className="banner" role="status" aria-live="polite">
-              {message}
-            </div>
-          )}
-          {error && (
-            <div className="banner error" role="alert">
-              {error}
-            </div>
-          )}
+        {message && (
+          <div className="banner" role="status" aria-live="polite">
+            {message}
+          </div>
+        )}
+        {error && (
+          <div className="banner error" role="alert">
+            {error}
+          </div>
+        )}
 
-          {!isComplete && (
-            <div className="banner account-setup-banner">
-              Workspace setup is {completedCount}/{totalSteps} complete.{" "}
-              <button className="setup-inline-button" onClick={openSetup} type="button">
-                Resume setup
+        {!isComplete && (
+          <div className="banner account-setup-banner">
+            Workspace setup is {completedCount}/{totalSteps} complete.{" "}
+            <button className="setup-inline-button" onClick={openSetup} type="button">
+              Resume setup
+            </button>
+          </div>
+        )}
+
+        <div className="account-settings">
+          <nav className="account-settings-nav" aria-label="Account settings sections">
+            {navSections.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`${activeSection === section.id ? "is-active" : ""}${section.danger ? " danger-nav" : ""}`}
+                aria-current={activeSection === section.id ? "page" : undefined}
+                onClick={() => selectSection(section.id)}
+              >
+                {section.label}
               </button>
-            </div>
-          )}
+            ))}
+          </nav>
 
-          <div className="account-grid">
-            <article className="card">
-              <p className="label">Profile</p>
-              {loadingProfile ? (
-                <p className="muted small">Loading profile…</p>
-              ) : (
-                <form className="auth-form account-form" onSubmit={handleSave}>
-                  <label htmlFor={fullNameId}>
-                    Full name
-                    <input
-                      id={fullNameId}
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                    />
-                  </label>
-                  <label htmlFor="account-email">
-                    Email
-                    <input id="account-email" value={user?.email ?? ""} disabled />
-                  </label>
-                  <p className="muted small">Email is managed by your login and cannot be changed here yet.</p>
-                  <label htmlFor={renewalEmailId}>
-                    Renewal reminder email
-                    <input
-                      id={renewalEmailId}
-                      type="email"
-                      value={renewalNotificationEmail}
-                      onChange={(e) => setRenewalNotificationEmail(e.target.value)}
-                      placeholder={user?.email ?? "Same as login email"}
-                      autoComplete="email"
-                    />
-                  </label>
-                  <p className="muted small">
-                    If your signup email doesn&apos;t receive our messages, enter a Gmail or work address here.
-                    Leave blank to use your login email ({user?.email ?? "—"}).
-                  </p>
-                  <button type="submit" className="auth-submit" disabled={saving}>
-                    {saving ? "Saving…" : "Save profile"}
-                  </button>
-                </form>
-              )}
-            </article>
-
-            <article className="card">
-              <p className="label">Clinic workspace</p>
-              <p>
-                <strong>{org?.name ?? "—"}</strong>
-              </p>
-              <p className="muted small">
-                Role: <strong>{activeMembership?.role ?? "—"}</strong>
-              </p>
-              <p className="muted small">
-                Plan: <strong>{org ? getPlanLabel(org) : "Trial"}</strong> ·{" "}
-                {org && (
-                  <>
-                    <strong>{formatMonthlyPrice(getLockedPriceCents(org))}</strong>
-                    {org.isFounding ? " (locked founding rate)" : ""} ·{" "}
-                  </>
-                )}
-                Status: <strong>{subscriptionStatus}</strong>
-                {org && !isSubscriptionActive(org) && " (inactive)"}
-                {org && isOnActiveTrial(org) && org.trialEndsAt && (
-                  <>
-                    {" "}
-                    · Trial ends{" "}
-                    {getTrialDaysRemaining(org.trialEndsAt) === 0
-                      ? "today"
-                      : `in ${getTrialDaysRemaining(org.trialEndsAt)} days`}
-                  </>
-                )}
-              </p>
-              {memberships.length > 1 && (
-                <p className="muted small">You belong to {memberships.length} workspaces. Switch workspace in the Vendors sidebar.</p>
-              )}
-              <Link className="marketing-button primary account-billing-link" to="/app/billing">
-                Open billing & plan
-              </Link>
-            </article>
-
-            {isPlatformAdmin && <SystemHealthPanel />}
-
-            <article className="card">
-              <p className="label">Legal</p>
-              <p className="muted small">
-                {termsAcceptedAt ? (
-                  <>
-                    Terms accepted{" "}
-                    {new Date(termsAcceptedAt).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                    {termsVersion ? ` (version ${termsVersion})` : ""}.
-                  </>
+          <div className="account-settings-panel">
+            {activeSection === "profile" && (
+              <article className="card account-settings-section">
+                <h2>Profile</h2>
+                <p className="muted small section-lead">Your name and notification preferences.</p>
+                {loadingProfile ? (
+                  <p className="muted small">Loading profile…</p>
                 ) : (
-                  <>Current Terms version: {TERMS_VERSION}.</>
+                  <form className="auth-form account-form" onSubmit={handleSave}>
+                    <label htmlFor={fullNameId}>
+                      Full name
+                      <input
+                        id={fullNameId}
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label htmlFor="account-email">
+                      Email
+                      <input id="account-email" value={user?.email ?? ""} disabled />
+                    </label>
+                    <p className="muted small">Email is managed by your login and cannot be changed here yet.</p>
+                    <label htmlFor={renewalEmailId}>
+                      Renewal reminder email
+                      <input
+                        id={renewalEmailId}
+                        type="email"
+                        value={renewalNotificationEmail}
+                        onChange={(e) => setRenewalNotificationEmail(e.target.value)}
+                        placeholder={user?.email ?? "Same as login email"}
+                        autoComplete="email"
+                      />
+                    </label>
+                    <p className="muted small">
+                      If your signup email doesn&apos;t receive our messages, enter a Gmail or work address here.
+                      Leave blank to use your login email ({user?.email ?? "—"}).
+                    </p>
+                    <button type="submit" className="auth-submit" disabled={saving}>
+                      {saving ? "Saving…" : "Save profile"}
+                    </button>
+                  </form>
                 )}
-              </p>
-              <LegalFooter />
-            </article>
+              </article>
+            )}
 
-            {isOwner && org && (
-              <article className="card account-data-section">
-                <p className="label">Your data</p>
+            {activeSection === "workspace" && (
+              <article className="card account-settings-section">
+                <h2>Workspace</h2>
+                <p className="muted small section-lead">Your clinic workspace membership and plan.</p>
+                <p>
+                  <strong>{org?.name ?? "—"}</strong>
+                </p>
                 <p className="muted small">
-                  Download a JSON copy of vendor records, contacts, contract and document metadata, spend entries,
-                  and evaluations. Uploaded PDF files are not included — only file names and sizes.
+                  Role: <strong>{activeMembership?.role ?? "—"}</strong>
+                </p>
+                <p className="muted small">
+                  Plan: <strong>{org ? getPlanLabel(org) : "Trial"}</strong> ·{" "}
+                  {org && (
+                    <>
+                      <strong>{formatMonthlyPrice(getLockedPriceCents(org))}</strong>
+                      {org.isFounding ? " (locked founding rate)" : ""} ·{" "}
+                    </>
+                  )}
+                  Status: <strong>{subscriptionStatus}</strong>
+                  {org && !isSubscriptionActive(org) && " (inactive)"}
+                  {org && isOnActiveTrial(org) && org.trialEndsAt && (
+                    <>
+                      {" "}
+                      · Trial ends{" "}
+                      {getTrialDaysRemaining(org.trialEndsAt) === 0
+                        ? "today"
+                        : `in ${getTrialDaysRemaining(org.trialEndsAt)} days`}
+                    </>
+                  )}
+                </p>
+                {memberships.length > 1 && (
+                  <p className="muted small">
+                    You belong to {memberships.length} workspaces. Switch workspace in the Vendors sidebar.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="marketing-button primary account-billing-link"
+                  onClick={() => selectSection("billing")}
+                >
+                  Open billing & plan
+                </button>
+              </article>
+            )}
+
+            {activeSection === "billing" && <BillingSection />}
+
+            {activeSection === "data" && isOwner && org && (
+              <article className="card account-settings-section">
+                <h2>Your data</h2>
+                <p className="muted small section-lead">
+                  Download a portable copy of your workspace records.
+                </p>
+                <p className="muted small">
+                  Exports vendor records, contacts, contract and document metadata, spend entries, and
+                  evaluations as a JSON file.
                 </p>
                 <button
                   type="button"
@@ -339,76 +407,108 @@ export function AccountPage() {
                 >
                   {exporting ? "Preparing export…" : "Export workspace data"}
                 </button>
+                <p className="muted small">
+                  Downloads a JSON file you can open in any browser or text editor — no Adobe or special
+                  software required. PDF files are not included; only file names and sizes.
+                </p>
               </article>
             )}
 
-            <article className="card account-danger-zone">
-              <p className="label">Danger zone</p>
-              <p className="muted small">
-                Permanently remove workspace data or your entire account. Cancel any active Stripe subscription
-                first from billing if applicable.
-              </p>
+            {activeSection === "legal" && (
+              <article className="card account-settings-section">
+                <h2>Legal</h2>
+                <p className="muted small section-lead">Terms acceptance and policy documents.</p>
+                <p className="muted small">
+                  {termsAcceptedAt ? (
+                    <>
+                      Terms accepted{" "}
+                      {new Date(termsAcceptedAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                      {termsVersion ? ` (version ${termsVersion})` : ""}.
+                    </>
+                  ) : (
+                    <>Current Terms version: {TERMS_VERSION}.</>
+                  )}
+                </p>
+                <LegalFooter />
+              </article>
+            )}
 
-              {isOwner && org && (
+            {activeSection === "system" && isPlatformAdmin && <SystemHealthPanel />}
+
+            {activeSection === "danger" && (
+              <article className="card account-settings-section account-danger-zone">
+                <h2>Danger zone</h2>
+                <p className="muted small section-lead">
+                  Permanently remove workspace data or your entire account. Cancel any active Stripe
+                  subscription first from billing if applicable.
+                </p>
+
+                {isOwner && org && (
+                  <div className="account-danger-action">
+                    <p className="account-danger-title">Delete workspace</p>
+                    <p className="muted small">
+                      Removes <strong>{org.name}</strong>, all vendors, contracts, uploaded files, and member
+                      access. Other members lose access immediately.
+                    </p>
+                    <label htmlFor={deleteOrgConfirmId}>
+                      Type <strong>{orgDeletePhrase}</strong> to confirm
+                      <input
+                        id={deleteOrgConfirmId}
+                        value={deleteOrgConfirm}
+                        onChange={(e) => setDeleteOrgConfirm(e.target.value)}
+                        placeholder={orgDeletePhrase}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="delete account-danger-button"
+                      onClick={() => void handleDeleteWorkspace()}
+                      disabled={deletingOrg || deletingAccount}
+                    >
+                      {deletingOrg ? "Deleting workspace…" : "Delete workspace"}
+                    </button>
+                  </div>
+                )}
+
                 <div className="account-danger-action">
-                  <p className="account-danger-title">Delete workspace</p>
+                  <p className="account-danger-title">Delete my account</p>
                   <p className="muted small">
-                    Removes <strong>{org.name}</strong>, all vendors, contracts, uploaded files, and member
-                    access. Other members lose access immediately.
+                    Removes your profile, outreach CRM, and sole-member workspaces. You must transfer ownership
+                    or delete shared workspaces first.
                   </p>
-                  <label htmlFor={deleteOrgConfirmId}>
-                    Type <strong>{orgDeletePhrase}</strong> to confirm
+                  <label htmlFor={deleteAccountConfirmId}>
+                    Type <strong>delete my account</strong> to confirm
                     <input
-                      id={deleteOrgConfirmId}
-                      value={deleteOrgConfirm}
-                      onChange={(e) => setDeleteOrgConfirm(e.target.value)}
-                      placeholder={orgDeletePhrase}
+                      id={deleteAccountConfirmId}
+                      value={deleteAccountConfirm}
+                      onChange={(e) => setDeleteAccountConfirm(e.target.value)}
+                      placeholder="delete my account"
                       autoComplete="off"
                     />
                   </label>
                   <button
                     type="button"
                     className="delete account-danger-button"
-                    onClick={() => void handleDeleteWorkspace()}
+                    onClick={() => void handleDeleteAccount()}
                     disabled={deletingOrg || deletingAccount}
                   >
-                    {deletingOrg ? "Deleting workspace…" : "Delete workspace"}
+                    {deletingAccount ? "Deleting account…" : "Delete my account"}
                   </button>
                 </div>
-              )}
-
-              <div className="account-danger-action">
-                <p className="account-danger-title">Delete my account</p>
-                <p className="muted small">
-                  Removes your profile, outreach CRM, and sole-member workspaces. You must transfer ownership or
-                  delete shared workspaces first.
-                </p>
-                <label htmlFor={deleteAccountConfirmId}>
-                  Type <strong>delete my account</strong> to confirm
-                  <input
-                    id={deleteAccountConfirmId}
-                    value={deleteAccountConfirm}
-                    onChange={(e) => setDeleteAccountConfirm(e.target.value)}
-                    placeholder="delete my account"
-                    autoComplete="off"
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="delete account-danger-button"
-                  onClick={() => void handleDeleteAccount()}
-                  disabled={deletingOrg || deletingAccount}
-                >
-                  {deletingAccount ? "Deleting account…" : "Delete my account"}
-                </button>
-              </div>
-            </article>
+              </article>
+            )}
           </div>
+        </div>
 
-          <p className="muted small account-help">
-            Need a different clinic workspace? <Link to="/app">Go to vendors</Link> or sign out and create another account.
-          </p>
-        </section>
-      </main>
+        <p className="muted small account-help">
+          Need a different clinic workspace? <Link to="/app">Go to vendors</Link> or sign out and create another account.
+        </p>
+      </section>
+    </main>
   );
 }

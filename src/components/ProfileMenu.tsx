@@ -18,15 +18,9 @@ function profileInitials(user: { email?: string; user_metadata?: Record<string, 
 
 type ProfileMenuProps = {
   accountPath?: string;
-  billingPath?: string;
-  showBilling?: boolean;
 };
 
-export function ProfileMenu({
-  accountPath = "/app/account",
-  billingPath = "/app/billing",
-  showBilling = true,
-}: ProfileMenuProps) {
+export function ProfileMenu({ accountPath = "/app/account" }: ProfileMenuProps) {
   const { signOut, user } = useAuth();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -73,11 +67,6 @@ export function ProfileMenu({
           <Link className="profile-menu-item" role="menuitem" to={accountPath} onClick={() => setOpen(false)}>
             Account
           </Link>
-          {showBilling && (
-            <Link className="profile-menu-item" role="menuitem" to={billingPath} onClick={() => setOpen(false)}>
-              Billing
-            </Link>
-          )}
           <button
             type="button"
             className="profile-menu-item profile-menu-signout"
