@@ -6,15 +6,15 @@ Operational checklist for **suppliersync.org**. Complements the public [Privacy 
 
 ## Subprocessors
 
-SupplierSync uses the following subprocessors to run the Service. Sign data processing agreements (DPAs) in each vendor dashboard where available:
+SupplierSync uses the following subprocessors to run the Service. On free/hobby tiers there is usually **no “Sign DPA” button** — the DPA is incorporated into each provider’s Terms of Service. **Done** = download the DPA, save it in your records, and note your account/ToS acceptance date.
 
-| Provider | Purpose | DPA / privacy |
-|----------|---------|---------------|
-| **Supabase** | Database, authentication, file storage | [Supabase DPA](https://supabase.com/legal/dpa) — project settings → Legal |
-| **Stripe** | Subscription billing | [Stripe DPA](https://stripe.com/legal/dpa) — Dashboard → Settings |
-| **Resend** | Transactional email (renewal reminders, digests) | [Resend legal](https://resend.com/legal) |
-| **OpenAI** | AI PDF extraction (contract & document scan) | [OpenAI DPA](https://openai.com/policies/data-processing-addendum) — Organization settings |
-| **Vercel** | Frontend hosting | [Vercel DPA](https://vercel.com/legal/dpa) |
+| Provider | Purpose | How to complete |
+|----------|---------|-----------------|
+| **Supabase** | Database, authentication, file storage | Org **Documents** → View DPA — [Supabase DPA](https://supabase.com/legal/customer-resources/data-processing-addendum) |
+| **Stripe** | Subscription billing | Download [Stripe DPA](https://stripe.com/legal/dpa) (incorporated into SSA; no dashboard sign flow) |
+| **Resend** | Transactional email (renewal reminders, digests) | **Settings → Documents** — download executed DPA — [Resend legal](https://resend.com/legal) |
+| **OpenAI** | AI PDF extraction (contract & document scan) | **Execute DPA** form on [OpenAI DPA page](https://openai.com/policies/data-processing-addendum); zero retention requires sales approval |
+| **Vercel** | Frontend hosting | Download [Vercel DPA](https://vercel.com/legal/dpa); opt out of AI training in [Data Preferences](https://vercel.com/account/settings/data-preferences) |
 
 Keep subprocessors list in sync with `src/lib/legal.ts` (Privacy Policy §4).
 
@@ -62,5 +62,6 @@ Deletion removes data from active systems; Supabase backups may retain copies fo
 ## Related docs
 
 - [DATA_RETENTION.md](./DATA_RETENTION.md)
+- [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md)
 - [ABUSE_PREVENTION.md](./ABUSE_PREVENTION.md)
 - [PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md)

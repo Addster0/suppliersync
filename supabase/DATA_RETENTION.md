@@ -148,10 +148,18 @@ Public promises (`src/lib/legal.ts`):
 
 ---
 
+## Disaster recovery
+
+Backups, RPO/RTO, and restore steps (DB, storage, edge functions, Vercel): [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md).
+
+Supabase daily backups may retain deleted data until the backup window expires (see Privacy Policy §8). Storage objects are **not** auto-restored with a DB backup — run [STORAGE_SETUP.sql](./STORAGE_SETUP.sql) after restore.
+
+---
+
 ## Related docs
 
+- [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md) — RPO/RTO, restore runbook
 - [COMPLIANCE.md](./COMPLIANCE.md) — subprocessors, HIPAA positioning, GDPR/CCPA rights
-
 - [ABUSE_PREVENTION.md](./ABUSE_PREVENTION.md) — `api_usage_log` 7-day purge note
 - [PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md)
 - [STRIPE_SETUP.md](./STRIPE_SETUP.md)
