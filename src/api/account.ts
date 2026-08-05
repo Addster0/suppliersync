@@ -10,11 +10,12 @@ async function functionInvokeErrorMessage(error: unknown): Promise<string> {
   if (error instanceof FunctionsHttpError && error.context instanceof Response) {
     try {
       const payload = (await error.context.clone().json()) as { error?: string; message?: string };
-      if (typeof payload?.error === "string" && payload.error.trim()) {
-        return payload.error;
-      }
-      if (typeof payload?.message === "string" && payload.message.trim()) {
-        return payload.message;
+      const bodyError = payload?.error?.trim() || payload?.message?.trim();
+      if (bodyError) {
+        if (/delete_my_account|function.*does not exist/i.test(bodyError)) {
+          return "Account deletion database migration is missing. Run migration 029 in Supabase SQL Editor.";
+        }
+        return bodyError;
       }
     } catch {
       // Response body was not JSON.

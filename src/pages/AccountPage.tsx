@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { deleteAccount, deleteOrganization } from "../api/account";
 import { downloadOrganizationExport, exportOrganizationData } from "../api/export";
@@ -57,6 +57,16 @@ export function AccountPage() {
   const renewalEmailId = useId();
   const deleteOrgConfirmId = useId();
   const deleteAccountConfirmId = useId();
+  const dangerErrorRef = useRef<HTMLDivElement>(null);
+  const [dangerError, setDangerError] = useState("");
+
+  const showDangerError = useCallback((message: string) => {
+    setDangerError(message);
+    setError(message);
+    requestAnimationFrame(() => {
+      dangerErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, []);
 
   useEffect(() => {
     void fetchIsPlatformAdmin().then(setIsPlatformAdmin);
@@ -183,18 +193,19 @@ export function AccountPage() {
   async function handleDeleteWorkspace() {
     if (!org || !isOwner) return;
 
+    if (deleteOrgConfirm.trim().toLowerCase() !== orgDeletePhrase.toLowerCase()) {
+      showDangerError(`Type "${orgDeletePhrase}" in the confirmation box below before deleting.`);
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete workspace "${org.name}"? All vendors, contracts, documents, and files will be permanently removed. This cannot be undone.`
     );
     if (!confirmed) return;
 
-    if (deleteOrgConfirm.trim().toLowerCase() !== orgDeletePhrase.toLowerCase()) {
-      setError(`Type "${orgDeletePhrase}" to confirm workspace deletion.`);
-      return;
-    }
-
     setDeletingOrg(true);
     setError("");
+    setDangerError("");
     setMessage("");
 
     try {
@@ -204,25 +215,26 @@ export function AccountPage() {
       setMessage(`Workspace "${org.name}" was deleted.`);
       navigate("/app");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete workspace.");
+      showDangerError(err instanceof Error ? err.message : "Could not delete workspace.");
     } finally {
       setDeletingOrg(false);
     }
   }
 
   async function handleDeleteAccount() {
+    if (deleteAccountConfirm.trim().toLowerCase() !== "delete my account") {
+      showDangerError('Type "delete my account" in the confirmation box below before deleting.');
+      return;
+    }
+
     const confirmed = window.confirm(
       "Delete your SupplierSync account permanently? Your profile, outreach CRM data, and any workspaces where you are the only member will be removed. This cannot be undone."
     );
     if (!confirmed) return;
 
-    if (deleteAccountConfirm.trim().toLowerCase() !== "delete my account") {
-      setError('Type "delete my account" to confirm account deletion.');
-      return;
-    }
-
     setDeletingAccount(true);
     setError("");
+    setDangerError("");
     setMessage("");
 
     try {
@@ -230,7 +242,7 @@ export function AccountPage() {
       await signOut();
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete account.");
+      showDangerError(err instanceof Error ? err.message : "Could not delete account.");
       setDeletingAccount(false);
     }
   }
@@ -491,6 +503,17 @@ export function AccountPage() {
                   subscription first from billing if applicable.
                 </p>
 
+                {dangerError && (
+                  <div
+                    ref={dangerErrorRef}
+                    className="banner error inline account-danger-error"
+                    role="alert"
+                    aria-live="assertive"
+                  >
+                    {dangerError}
+                  </div>
+                )}
+
                 {isOwner && org && (
                   <div className="account-danger-action">
                     <p className="account-danger-title">Delete workspace</p>
@@ -503,7 +526,10 @@ export function AccountPage() {
                       <input
                         id={deleteOrgConfirmId}
                         value={deleteOrgConfirm}
-                        onChange={(e) => setDeleteOrgConfirm(e.target.value)}
+                        onChange={(e) => {
+                          setDeleteOrgConfirm(e.target.value);
+                          if (dangerError) setDangerError("");
+                        }}
                         placeholder={orgDeletePhrase}
                         autoComplete="off"
                       />
@@ -530,7 +556,10 @@ export function AccountPage() {
                     <input
                       id={deleteAccountConfirmId}
                       value={deleteAccountConfirm}
-                      onChange={(e) => setDeleteAccountConfirm(e.target.value)}
+                      onChange={(e) => {
+                        setDeleteAccountConfirm(e.target.value);
+                        if (dangerError) setDangerError("");
+                      }}
                       placeholder="delete my account"
                       autoComplete="off"
                     />
