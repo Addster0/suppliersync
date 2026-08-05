@@ -1194,41 +1194,31 @@ a.file-attachment-link:hover {
   padding: 11px 14px;
   border-radius: 12px;
   border: none;
-  background: #1d4ed8;
-  color: #ffffff;
+  background: transparent;
+  color: #64748b;
   font-size: 14px;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
 
-.account-settings-nav button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  opacity: 0.94;
+.account-settings-nav button:hover {
+  background: #ffffff;
+  color: #1e293b;
 }
 
 .account-settings-nav button.is-active {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #ffffff;
-  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.3);
-}
-
-.account-settings-nav button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
 .account-settings-nav button.danger-nav {
-  background: #dc2626;
-  color: #ffffff;
+  color: #b91c1c;
 }
 
 .account-settings-nav button.danger-nav.is-active {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  color: #ffffff;
-  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
 }
 
 .account-settings-panel {
@@ -1321,6 +1311,9 @@ a.file-attachment-link:hover {
   display: inline-flex;
   margin-top: 14px;
   text-decoration: none;
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.22);
 }
 
 .renewals-shell {
@@ -2003,30 +1996,13 @@ a.file-attachment-link:hover {
 }
 
 .setup-inline-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 12px;
   border: none;
-  border-radius: 10px;
-  background: #1d4ed8;
-  color: #ffffff;
+  background: none;
+  color: #1d4ed8;
   font-weight: 700;
-  font-size: inherit;
   cursor: pointer;
-  text-decoration: none;
-  transition: transform 0.15s ease, opacity 0.15s ease;
-}
-
-.setup-inline-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  opacity: 0.94;
-}
-
-.setup-inline-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
+  padding: 0;
+  text-decoration: underline;
 }
 
 .billing-trial-remaining {
@@ -2377,31 +2353,25 @@ a.file-attachment-link:hover {
 }
 
 .account-advanced-export-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
   margin-top: 16px;
-  padding: 12px 14px;
+  padding: 0;
   border: none;
-  border-radius: 14px;
-  background: #1d4ed8;
-  color: #ffffff;
+  background: none;
+  color: #475569;
   font-size: 13px;
-  font-weight: 800;
-  text-decoration: none;
+  font-weight: 600;
+  text-decoration: underline;
   cursor: pointer;
-  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .account-advanced-export-link:hover:not(:disabled) {
-  transform: translateY(-1px);
-  opacity: 0.94;
+  color: #1d4ed8;
 }
 
 .account-advanced-export-link:disabled {
-  opacity: 0.55;
+  opacity: 0.65;
   cursor: not-allowed;
-  transform: none;
 }
 
 .account-danger-zone {
@@ -2659,30 +2629,29 @@ a.file-attachment-link:hover {
 .search-result-button {
   width: 100%;
   text-align: left;
-  background: #1d4ed8;
-  color: #ffffff;
-  border: none;
+  background: #f8fafc;
+  color: #172033;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 10px 12px;
   display: grid;
   gap: 2px;
   cursor: pointer;
   font-weight: 600;
-  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .search-result-button strong {
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .search-result-button .muted {
-  color: rgba(255, 255, 255, 0.82);
+  color: #64748b;
 }
 
 .search-result-button:hover,
 .search-result-button.is-active {
-  transform: translateY(-1px);
-  opacity: 0.94;
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 
 .search-result-type {
@@ -3088,7 +3057,7 @@ a.file-attachment-link:hover {
 }
 
 .marketing-button.primary {
-  background: linear-gradient(135deg, var(--m-primary), #2563eb);
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
   color: white;
   box-shadow: 0 12px 28px rgba(29, 78, 216, 0.28);
 }
