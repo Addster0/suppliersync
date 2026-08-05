@@ -135,7 +135,14 @@ export function AccountPage() {
   const orgDeletePhrase = orgName ? `delete ${orgName}` : "";
 
   async function handleExportReport() {
-    if (!org || !isOwner) return;
+    if (!org) {
+      setError("No workspace selected. Switch to a workspace in the sidebar and try again.");
+      return;
+    }
+    if (!isOwner) {
+      setError("Only workspace owners can download reports. Ask your workspace owner for a copy.");
+      return;
+    }
 
     setExportingReport(true);
     setError("");
@@ -148,7 +155,8 @@ export function AccountPage() {
         `Downloaded workspace report for ${data.vendors.length} vendor${data.vendors.length === 1 ? "" : "s"}. Open the HTML file in your browser, then use Print → Save as PDF if you need a PDF copy.`
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not export workspace report.");
+      const detail = err instanceof Error ? err.message : "Could not export workspace report.";
+      setError(`${detail} If nothing downloaded, check your browser’s download permission for this site.`);
     } finally {
       setExportingReport(false);
     }

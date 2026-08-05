@@ -10,7 +10,7 @@ import {
 } from "./renewals";
 import { ledgerPaymentTotal, topVendorsBySpend, vendorYtdSpend } from "./spend";
 import type { Vendor } from "../types";
-import { formatFileSize, money, prettyDate } from "./utils";
+import { downloadBlob, formatFileSize, money, prettyDate } from "./utils";
 
 function escapeHtml(value: string) {
   return value
@@ -250,12 +250,21 @@ export function buildOrganizationExportHtml(data: OrganizationExport): string {
 }
 
 export function downloadOrganizationReport(data: OrganizationExport): void {
-  const html = buildOrganizationExportHtml(data);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = organizationReportFilename(data.organization.name, new Date(data.exportedAt));
-  anchor.click();
-  URL.revokeObjectURL(url);
+  let html: string;
+  try {
+    html = buildOrganizationExportHtml(data);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    throw new Error(`Could not build workspace report: ${detail}`);
+  }
+
+  try {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    downloadBlob(blob, organizationReportFilename(data.organization.name, new Date(data.exportedAt)));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    throw new Error(
+      `Could not start the report download: ${detail}. Check that downloads are allowed for this site and try again.`
+    );
+  }
 }

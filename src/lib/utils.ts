@@ -157,6 +157,19 @@ export function getStatusClass(status: string) {
   return `badge ${status}`;
 }
 
+/** Trigger a file download from a Blob (append anchor to DOM for Safari/Chrome). */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Opens HTML in a new tab and triggers print. Uses a blob URL so it works with noopener pop-ups. */
 export function openPrintableHtml(html: string) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });

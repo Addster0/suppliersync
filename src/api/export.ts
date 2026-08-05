@@ -1,4 +1,5 @@
 import { fetchVendors } from "./vendors";
+import { downloadBlob } from "../lib/utils";
 import { requireSupabase } from "../lib/supabase";
 import type { Contract, DocumentItem, Vendor } from "../types";
 
@@ -87,12 +88,14 @@ function jsonExportFilename(orgName: string): string {
 }
 
 export function downloadOrganizationExport(data: OrganizationExport): void {
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = jsonExportFilename(data.organization.name);
-  anchor.click();
-  URL.revokeObjectURL(url);
+  try {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    downloadBlob(blob, jsonExportFilename(data.organization.name));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    throw new Error(
+      `Could not start the JSON export download: ${detail}. Check that downloads are allowed for this site and try again.`
+    );
+  }
 }
