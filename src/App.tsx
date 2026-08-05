@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { fetchProfileTerms } from "./api/profile";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { OrganizationProvider, useOrganization } from "./contexts/OrganizationContext";
@@ -177,6 +178,16 @@ function OutreachProtected() {
   );
 }
 
+function AppRoutesWithBoundary() {
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary resetKeys={[location.pathname]}>
+      <AppRoutes />
+    </ErrorBoundary>
+  );
+}
+
 function AppRoutes() {
   const { session, loading, recoveryMode } = useAuth();
 
@@ -245,7 +256,7 @@ export default function App() {
     <SupabaseConnectionGate>
       <AuthProvider>
         <RobotsMeta />
-        <AppRoutes />
+        <AppRoutesWithBoundary />
       </AuthProvider>
     </SupabaseConnectionGate>
   );

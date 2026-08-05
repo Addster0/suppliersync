@@ -1141,6 +1141,28 @@ a.file-attachment-link:hover {
   text-decoration: underline;
 }
 
+.error-boundary-card {
+  max-width: 480px;
+}
+
+.error-boundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.error-boundary-actions .auth-submit {
+  flex: 1 1 160px;
+  margin-top: 0;
+}
+
+.error-boundary-home-link {
+  flex: 1 1 160px;
+  margin-top: 0;
+  text-decoration: none;
+}
+
 .auth-text-button {
   background: none;
   border: none;
