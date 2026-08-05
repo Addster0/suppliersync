@@ -420,7 +420,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const resendKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("RENEWAL_FROM_EMAIL") ?? "SupplierSync <onboarding@resend.dev>";
+    const fromEmail = Deno.env.get("RENEWAL_FROM_EMAIL") ?? "SupplierSync <renewals@suppliersync.org>";
     const appUrl = Deno.env.get("APP_URL") ?? "https://suppliersync.org";
     const cronSecret = Deno.env.get("CRON_SECRET");
 

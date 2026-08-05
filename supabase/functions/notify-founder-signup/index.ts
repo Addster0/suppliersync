@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
   const fromEmail =
     Deno.env.get("SIGNUP_FROM_EMAIL") ??
     Deno.env.get("RENEWAL_FROM_EMAIL") ??
-    "SupplierSync <onboarding@resend.dev>";
+    "SupplierSync <renewals@suppliersync.org>";
   const founderEmail = Deno.env.get("FOUNDER_NOTIFY_EMAIL") ?? "addstero28@gmail.com";
   const appUrl = Deno.env.get("APP_URL") ?? "https://suppliersync.org";
   const adminUrl = `${appUrl.replace(/\/$/, "")}/app/admin/signups`;

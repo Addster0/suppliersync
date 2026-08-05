@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_URL="${APP_URL:-https://suppliersync.org}"
-FROM_EMAIL="${SIGNUP_FROM_EMAIL:-${RENEWAL_FROM_EMAIL:-SupplierSync <onboarding@resend.dev>}}"
+FROM_EMAIL="${SIGNUP_FROM_EMAIL:-${RENEWAL_FROM_EMAIL:-SupplierSync <renewals@suppliersync.org>}}"
 FOUNDER_EMAIL="${FOUNDER_NOTIFY_EMAIL:-addstero28@gmail.com}"
 
 echo "SupplierSync founder signup notification setup"

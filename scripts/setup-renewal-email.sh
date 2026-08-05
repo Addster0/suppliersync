@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_URL="${APP_URL:-https://suppliersync.org}"
-FROM_EMAIL="${RENEWAL_FROM_EMAIL:-SupplierSync <onboarding@resend.dev>}"
+FROM_EMAIL="${RENEWAL_FROM_EMAIL:-SupplierSync <renewals@suppliersync.org>}"
 
 echo "SupplierSync renewal email setup"
 echo ""
