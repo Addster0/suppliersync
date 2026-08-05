@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useId, useMemo, useState } from "rea
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { deleteAccount, deleteOrganization } from "../api/account";
 import { downloadOrganizationExport, exportOrganizationData } from "../api/export";
+import { downloadOrganizationReport } from "../lib/exportReport";
 import { fetchIsPlatformAdmin } from "../api/foundingApplication";
 import { useAuth } from "../contexts/AuthContext";
 import { useOrganization } from "../contexts/OrganizationContext";
@@ -49,7 +50,8 @@ export function AccountPage() {
   const [deleteAccountConfirm, setDeleteAccountConfirm] = useState("");
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
+  const [exportingJson, setExportingJson] = useState(false);
   const [activeSection, setActiveSection] = useState<AccountSection>(sectionFromUrl ?? "profile");
   const fullNameId = useId();
   const renewalEmailId = useId();
@@ -132,21 +134,41 @@ export function AccountPage() {
   const orgName = org?.name ?? "";
   const orgDeletePhrase = orgName ? `delete ${orgName}` : "";
 
-  async function handleExportWorkspace() {
+  async function handleExportReport() {
     if (!org || !isOwner) return;
 
-    setExporting(true);
+    setExportingReport(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const data = await exportOrganizationData(org.id);
+      downloadOrganizationReport(data);
+      setMessage(
+        `Downloaded workspace report for ${data.vendors.length} vendor${data.vendors.length === 1 ? "" : "s"}. Open the HTML file in your browser, then use Print → Save as PDF if you need a PDF copy.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not export workspace report.");
+    } finally {
+      setExportingReport(false);
+    }
+  }
+
+  async function handleExportJson() {
+    if (!org || !isOwner) return;
+
+    setExportingJson(true);
     setError("");
     setMessage("");
 
     try {
       const data = await exportOrganizationData(org.id);
       downloadOrganizationExport(data);
-      setMessage(`Exported ${data.vendors.length} vendor record${data.vendors.length === 1 ? "" : "s"} as JSON.`);
+      setMessage(`Downloaded advanced JSON export for ${data.vendors.length} vendor record${data.vendors.length === 1 ? "" : "s"}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not export workspace data.");
     } finally {
-      setExporting(false);
+      setExportingJson(false);
     }
   }
 
@@ -393,23 +415,37 @@ export function AccountPage() {
               <article className="card account-settings-section">
                 <h2>Your data</h2>
                 <p className="muted small section-lead">
-                  Download a portable copy of your workspace records.
+                  Download a readable copy of your workspace records.
                 </p>
                 <p className="muted small">
-                  Exports vendor records, contacts, contract and document metadata, spend entries, and
-                  evaluations as a JSON file.
+                  The workspace report includes vendor names, contacts, contract dates and values,
+                  renewal details, document metadata, spend entries, and scorecards in a clean HTML
+                  document you can open in any browser.
                 </p>
                 <button
                   type="button"
-                  className="secondary account-export-button"
-                  onClick={() => void handleExportWorkspace()}
-                  disabled={exporting || deletingOrg || deletingAccount}
+                  className="marketing-button primary account-export-button"
+                  onClick={() => void handleExportReport()}
+                  disabled={exportingReport || exportingJson || deletingOrg || deletingAccount}
                 >
-                  {exporting ? "Preparing export…" : "Export workspace data"}
+                  {exportingReport ? "Preparing report…" : "Download workspace report"}
                 </button>
                 <p className="muted small">
-                  Downloads a JSON file you can open in any browser or text editor — no Adobe or special
-                  software required. PDF files are not included; only file names and sizes.
+                  Opens as a normal web page — not code. Use your browser&apos;s{" "}
+                  <strong>Print → Save as PDF</strong> to create a PDF; Adobe Acrobat is not required.
+                  Uploaded PDF files are not included — only file names and sizes.
+                </p>
+                <button
+                  type="button"
+                  className="account-advanced-export-link"
+                  onClick={() => void handleExportJson()}
+                  disabled={exportingReport || exportingJson || deletingOrg || deletingAccount}
+                >
+                  {exportingJson ? "Preparing JSON…" : "Advanced export (JSON)"}
+                </button>
+                <p className="muted small">
+                  For IT backups or importing into other systems. JSON is machine-readable and not
+                  formatted for clinic staff review.
                 </p>
               </article>
             )}

@@ -75,7 +75,7 @@ export async function exportOrganizationData(organizationId: string): Promise<Or
   };
 }
 
-function exportFilename(orgName: string): string {
+function jsonExportFilename(orgName: string): string {
   const slug = orgName
     .trim()
     .toLowerCase()
@@ -92,7 +92,7 @@ export function downloadOrganizationExport(data: OrganizationExport): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = exportFilename(data.organization.name);
+  anchor.download = jsonExportFilename(data.organization.name);
   anchor.click();
   URL.revokeObjectURL(url);
 }

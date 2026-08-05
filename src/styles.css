@@ -2327,6 +2327,28 @@ a.file-attachment-link:hover {
   margin-top: 10px;
 }
 
+.account-advanced-export-link {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-advanced-export-link:hover:not(:disabled) {
+  color: #1d4ed8;
+}
+
+.account-advanced-export-link:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .account-danger-zone {
   border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, var(--border, #ddd));
 }
