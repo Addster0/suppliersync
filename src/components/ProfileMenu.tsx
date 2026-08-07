@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 function profileInitials(user: { email?: string; user_metadata?: Record<string, unknown> } | null): string {
@@ -20,10 +20,16 @@ type ProfileMenuProps = {
   accountPath?: string;
 };
 
+function isAccountPath(pathname: string, accountPath: string) {
+  return pathname === accountPath || pathname.endsWith(accountPath);
+}
+
 export function ProfileMenu({ accountPath = "/app/account" }: ProfileMenuProps) {
   const { signOut, user } = useAuth();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const onAccountPage = isAccountPath(pathname, accountPath);
 
   useEffect(() => {
     if (!open) return;
@@ -50,10 +56,11 @@ export function ProfileMenu({ accountPath = "/app/account" }: ProfileMenuProps) 
     <div className="profile-menu" ref={rootRef}>
       <button
         type="button"
-        className="profile-menu-trigger"
+        className={`profile-menu-trigger${onAccountPage ? " is-active" : ""}`}
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Account menu"
+        aria-current={onAccountPage ? "page" : undefined}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="profile-menu-avatar" aria-hidden="true">
@@ -64,7 +71,13 @@ export function ProfileMenu({ accountPath = "/app/account" }: ProfileMenuProps) 
       {open && (
         <div className="profile-menu-dropdown" role="menu">
           {user?.email && <p className="profile-menu-email">{user.email}</p>}
-          <Link className="profile-menu-item" role="menuitem" to={accountPath} onClick={() => setOpen(false)}>
+          <Link
+            aria-current={onAccountPage ? "page" : undefined}
+            className={`profile-menu-item${onAccountPage ? " is-active" : ""}`}
+            role="menuitem"
+            to={accountPath}
+            onClick={() => setOpen(false)}
+          >
             Account
           </Link>
           <button

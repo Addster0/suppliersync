@@ -10,7 +10,7 @@ import { getTrialDaysRemaining, isOnActiveTrial } from "../lib/stripe";
 import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { ProfileMenu } from "./ProfileMenu";
 
-type AppPath = "/app" | "/app/renewals" | "/app/account" | "/outreach";
+type AppPath = "/app" | "/app/renewals" | "/outreach";
 
 function tabActive(pathname: string, path: AppPath) {
   if (path === "/app") {
@@ -68,13 +68,6 @@ export function AppChrome({ children }: { children: ReactNode }) {
             to="/app/renewals"
           >
             Renewals
-          </Link>
-          <Link
-            aria-current={tabActive(pathname, "/app/account") ? "page" : undefined}
-            className={`app-topbar-tab${tabActive(pathname, "/app/account") ? " is-active" : ""}`}
-            to="/app/account"
-          >
-            Account
           </Link>
           {isPlatformAdmin && (
             <Link

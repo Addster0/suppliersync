@@ -180,7 +180,8 @@ select:focus-visible {
 }
 
 .profile-menu-trigger:hover,
-.profile-menu-trigger[aria-expanded="true"] {
+.profile-menu-trigger[aria-expanded="true"],
+.profile-menu-trigger.is-active {
   border-color: #93c5fd;
   background: #eff6ff;
 }
@@ -235,7 +236,8 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.profile-menu-item:hover {
+.profile-menu-item:hover,
+.profile-menu-item.is-active {
   background: #f1f5f9;
   color: #1d4ed8;
 }
