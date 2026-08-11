@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   addContact,
   addContract,
@@ -7,18 +7,23 @@ import {
   deleteSampleVendors,
   seedSampleVendors,
   uploadAndAddDocument,
+  uploadSetupContractDocument,
 } from "../api/vendors";
 import { useOrganization } from "../contexts/OrganizationContext";
 import { useSetup } from "../contexts/SetupContext";
 import { useFocusTrap } from "../lib/a11y";
 import { openClinicReport } from "../lib/clinicReport";
 import { CONTRACT_END_HINT, CONTRACT_END_LABEL } from "../lib/renewals";
-import type { SetupStepId } from "../lib/onboarding";
+import { areRequiredSetupStepsDone, type SetupStepId } from "../lib/onboarding";
 import { countSampleVendors } from "../lib/sampleVendors";
 import type { VendorTemplate } from "../lib/vendorTemplates";
 import { formatFileSize, MAX_FILE_BYTES } from "../lib/utils";
 import { VendorImportPanel } from "./VendorImportPanel";
 import { VendorTemplatePicker } from "./VendorTemplatePicker";
+
+function notifyVendorsChanged() {
+  window.dispatchEvent(new CustomEvent("suppliersync:vendors-changed"));
+}
 
 function todayIsoDate() {
   const date = new Date();
@@ -29,6 +34,7 @@ function todayIsoDate() {
 }
 
 export function SetupGuide() {
+  const navigate = useNavigate();
   const { activeMembership, canWrite } = useOrganization();
   const organizationId = activeMembership?.organizationId ?? "";
   const workspaceName = activeMembership?.organization.name ?? "Workspace";
@@ -56,7 +62,14 @@ export function SetupGuide() {
   const [vendorCategory, setVendorCategory] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
   const [templateHint, setTemplateHint] = useState("");
+  const [lastDocUpload, setLastDocUpload] = useState<{
+    vendorId: string;
+    tab: "contracts" | "documents";
+  } | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  const canFinish = areRequiredSetupStepsDone(steps) || isComplete;
+  const primaryVendorId = vendors[0]?.id;
 
   useFocusTrap(dialogRef, setupOpen);
 
@@ -96,6 +109,7 @@ export function SetupGuide() {
     try {
       await createVendor(organizationId, { name, category });
       await refreshSetup();
+      notifyVendorsChanged();
       setVendorName("");
       setVendorCategory("");
       setSelectedTemplateId(undefined);
@@ -142,7 +156,7 @@ export function SetupGuide() {
         status: "active",
       });
       await refreshSetup();
-      window.dispatchEvent(new CustomEvent("suppliersync:vendors-changed"));
+      notifyVendorsChanged();
       event.currentTarget.reset();
       setActiveStepId("contact");
     } catch (err) {
@@ -175,6 +189,7 @@ export function SetupGuide() {
         phone,
       });
       await refreshSetup();
+      notifyVendorsChanged();
       event.currentTarget.reset();
       setActiveStepId("document");
     } catch (err) {
@@ -190,6 +205,7 @@ export function SetupGuide() {
     const form = new FormData(event.currentTarget);
     const vendorId = String(form.get("vendorId") || "");
     const file = form.get("file");
+    const docType = String(form.get("docType") || "contract");
     if (!vendorId || !(file instanceof File) || !file.size) {
       setError("Pick a vendor and choose a file.");
       return;
@@ -202,10 +218,18 @@ export function SetupGuide() {
     setBusy(true);
     setError("");
     try {
-      await uploadAndAddDocument(organizationId, vendorId, file, {
-        docType: String(form.get("docType") || "general") as "general" | "coi" | "w9" | "license",
-      });
+      if (docType === "contract") {
+        const vendor = vendors.find((item) => item.id === vendorId);
+        await uploadSetupContractDocument(organizationId, vendorId, file, vendor?.contracts ?? []);
+        setLastDocUpload({ vendorId, tab: "contracts" });
+      } else {
+        await uploadAndAddDocument(organizationId, vendorId, file, {
+          docType: docType as "general" | "coi" | "w9" | "license",
+        });
+        setLastDocUpload({ vendorId, tab: "documents" });
+      }
       await refreshSetup();
+      notifyVendorsChanged();
       event.currentTarget.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
@@ -221,6 +245,7 @@ export function SetupGuide() {
     try {
       await seedSampleVendors(organizationId);
       await refreshSetup();
+      notifyVendorsChanged();
       setActiveStepId("renewal");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load sample data.");
@@ -241,7 +266,7 @@ export function SetupGuide() {
     try {
       const removed = await deleteSampleVendors(organizationId);
       await refreshSetup();
-      window.dispatchEvent(new CustomEvent("suppliersync:vendors-changed"));
+      notifyVendorsChanged();
       if (removed === 0) {
         setError("No sample vendors found to remove.");
       } else if (vendors.length - removed <= 0) {
@@ -257,6 +282,29 @@ export function SetupGuide() {
   function handleSkipDocument() {
     skipDocumentStep();
     setActiveStepId("document");
+  }
+
+  function handleFinish() {
+    if (!canFinish) {
+      setError("Complete the required steps first, then finish setup.");
+      return;
+    }
+    const documentStep = steps.find((step) => step.id === "document");
+    if (documentStep && !documentStep.done) {
+      skipDocumentStep();
+    }
+    notifyVendorsChanged();
+    const vendorWithContractFile = vendors.find((vendor) =>
+      vendor.contracts.some((contract) => Boolean(contract.file))
+    );
+    const finishVendorId = lastDocUpload?.vendorId ?? vendorWithContractFile?.id ?? primaryVendorId;
+    const finishTab =
+      lastDocUpload?.tab ?? (vendorWithContractFile ? "contracts" : undefined);
+    const href = finishVendorId
+      ? `/app?vendor=${finishVendorId}${finishTab ? `&tab=${finishTab}` : ""}`
+      : "/app";
+    closeSetup();
+    navigate(href);
   }
 
   return (
@@ -353,7 +401,10 @@ export function SetupGuide() {
                 <VendorImportPanel
                   compact
                   onImported={() => {
-                    void refreshSetup().then(() => setActiveStepId("renewal"));
+                    void refreshSetup().then(() => {
+                      notifyVendorsChanged();
+                      setActiveStepId("renewal");
+                    });
                   }}
                   organizationId={organizationId}
                 />
@@ -509,13 +560,18 @@ export function SetupGuide() {
                     </label>
                     <label>
                       Document type
-                      <select name="docType" defaultValue="coi">
+                      <select name="docType" defaultValue="contract">
+                        <option value="contract">Contract / agreement PDF</option>
                         <option value="coi">Certificate of insurance (COI)</option>
                         <option value="w9">W-9 / tax form</option>
                         <option value="license">Business license</option>
                         <option value="general">General document</option>
                       </select>
                     </label>
+                    <p className="muted small">
+                      Contract PDFs attach to the Contracts tab (linked to the renewal you added when
+                      possible). COI, W-9, and licenses appear under Documents.
+                    </p>
                     <label>
                       File
                       <input accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" name="file" required type="file" />
@@ -524,11 +580,18 @@ export function SetupGuide() {
                       {busy ? "Uploading…" : "Upload document"}
                     </button>
                   </form>
-                  {!activeStep?.done && (
-                    <button className="secondary setup-skip" onClick={handleSkipDocument} type="button">
-                      Skip for now
-                    </button>
-                  )}
+                  <div className="setup-panel-actions">
+                    {!activeStep?.done && (
+                      <button className="secondary" onClick={handleSkipDocument} type="button">
+                        Skip for now
+                      </button>
+                    )}
+                    {canFinish && !isComplete && (
+                      <button onClick={handleFinish} type="button">
+                        Finish
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -542,7 +605,11 @@ export function SetupGuide() {
                 page.
               </p>
               <div className="setup-panel-actions">
+                <button onClick={handleFinish} type="button">
+                  Finish
+                </button>
                 <button
+                  className="secondary"
                   onClick={() => {
                     openClinicReport({ workspaceName, vendors, renewals });
                   }}

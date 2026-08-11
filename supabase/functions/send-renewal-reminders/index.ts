@@ -7,6 +7,8 @@ import {
   shouldRunScheduledDigest,
   type DigestPeriodType,
 } from "./digestReport.ts";
+import { requireAuthenticatedUser } from "../_shared/requireAuthenticated.ts";
+import { secretsEqual } from "../_shared/secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -443,6 +445,9 @@ Deno.serve(async (req) => {
     const mode = typeof body.mode === "string" ? body.mode : "cron";
 
     if (mode === "status") {
+      const auth = await requireAuthenticatedUser(req, corsHeaders, jsonResponse);
+      if ("error" in auth && auth.error) return auth.error;
+
       return jsonResponse({
         configured: Boolean(resendKey),
         usingSandboxSender: isSandboxSender(fromEmail),
@@ -564,7 +569,7 @@ Deno.serve(async (req) => {
 
     if (mode === "cron") {
       const providedSecret = req.headers.get("x-cron-secret");
-      if (!cronSecret || providedSecret !== cronSecret) {
+      if (!cronSecret || !secretsEqual(providedSecret, cronSecret)) {
         return jsonResponse({ error: "Invalid cron secret." }, 401);
       }
 
@@ -645,12 +650,14 @@ Deno.serve(async (req) => {
     ) {
       const { data: vendors, error: vendorsError } = await admin
         .from("vendors")
-        .select("id, name, category")
+        .select("id, name, category, status")
         .eq("organization_id", organizationId);
 
       if (vendorsError) throw new Error(vendorsError.message);
 
       const vendorIds = (vendors ?? []).map((row) => row.id);
+      const vendorStatusById = new Map((vendors ?? []).map((row) => [row.id, row.status ?? "active"]));
+      const vendorNameById = new Map((vendors ?? []).map((row) => [row.id, row.name]));
 
       const { data: spendRows, error: spendError } =
         vendorIds.length > 0
@@ -674,12 +681,37 @@ Deno.serve(async (req) => {
 
       if (evaluationError) throw new Error(evaluationError.message);
 
+      const { data: contractRows, error: contractsError } = await admin
+        .from("contracts")
+        .select(
+          "id, title, vendor_id, value, status, end_date, renewal_date, renewal_type, notice_period_days, renewal_handled_at"
+        )
+        .eq("organization_id", organizationId);
+
+      if (contractsError) throw new Error(contractsError.message);
+
+      const contracts = (contractRows ?? []).map((row) => ({
+        id: row.id,
+        name: row.title,
+        vendorId: row.vendor_id,
+        vendorName: vendorNameById.get(row.vendor_id) ?? "Unknown vendor",
+        vendorStatus: vendorStatusById.get(row.vendor_id) ?? "active",
+        value: Number(row.value ?? 0),
+        status: row.status ?? "active",
+        endDate: row.end_date,
+        renewalDate: row.renewal_date,
+        renewalType: row.renewal_type ?? "fixed_term",
+        noticePeriodDays: row.notice_period_days,
+        renewalHandledAt: row.renewal_handled_at,
+      }));
+
       return buildDigestReportData({
         orgName,
         periodType,
         vendors: vendors ?? [],
         spendEntries: spendRows ?? [],
         evaluations: evaluationRows ?? [],
+        contracts,
       });
     }
 
@@ -799,7 +831,7 @@ Deno.serve(async (req) => {
 
     async function runDigestCron(periodType: DigestPeriodType) {
       const providedSecret = req.headers.get("x-cron-secret");
-      if (!cronSecret || providedSecret !== cronSecret) {
+      if (!cronSecret || !secretsEqual(providedSecret, cronSecret)) {
         return jsonResponse({ error: "Invalid cron secret." }, 401);
       }
 

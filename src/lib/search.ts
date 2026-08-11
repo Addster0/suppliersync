@@ -18,7 +18,8 @@ export function vendorMatchesQuery(vendor: Vendor, query: string) {
     vendor.name.toLowerCase().includes(q) ||
     vendor.category.toLowerCase().includes(q) ||
     vendor.address.toLowerCase().includes(q) ||
-    vendor.notes.toLowerCase().includes(q)
+    vendor.notes.toLowerCase().includes(q) ||
+    (vendor.stickyNotes ?? []).some((note) => note.body.toLowerCase().includes(q))
   );
 }
 
@@ -33,7 +34,8 @@ export function vendorMatchScore(vendor: Vendor, query: string) {
   if (name.includes(q)) return 2;
   if (category.includes(q)) return 3;
   if (vendor.address.toLowerCase().includes(q)) return 4;
-  if (vendor.notes.toLowerCase().includes(q)) return 5;
+  if ((vendor.stickyNotes ?? []).some((note) => note.body.toLowerCase().includes(q))) return 5;
+  if (vendor.notes.toLowerCase().includes(q)) return 6;
   return 99;
 }
 

@@ -7,11 +7,13 @@ import type {
   DocumentItem,
   Evaluation,
   Experiment,
+  FileAttachment,
   LedgerEntry,
   RenewalItem,
   SearchResult,
   Status,
   Vendor,
+  VendorStickyNote,
 } from "../types";
 import { parseCriteria, type EvaluationRecommendation } from "../lib/evaluations";
 import {
@@ -106,6 +108,12 @@ type VendorRow = {
     title: string;
     description: string;
     status: Experiment["status"];
+  }> | null;
+  vendor_sticky_notes: Array<{
+    id: string;
+    body: string;
+    created_at: string;
+    updated_at: string;
   }> | null;
 };
 
@@ -241,7 +249,67 @@ function mapVendor(row: VendorRow): Vendor {
         status: item.status,
       })
     ),
+    stickyNotes: (row.vendor_sticky_notes ?? [])
+      .map(
+        (note): VendorStickyNote => ({
+          id: note.id,
+          body: note.body,
+          createdAt: note.created_at,
+          updatedAt: note.updated_at,
+        })
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
+}
+
+function stickyNoteSetupHintFromError(message: string): string {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("vendor_sticky_notes") ||
+    lower.includes("does not exist") ||
+    lower.includes("schema cache") ||
+    lower.includes("relationship")
+  ) {
+    return " Run supabase/migrations/034_vendor_sticky_notes.sql in Supabase SQL Editor, then refresh.";
+  }
+  return "";
+}
+
+function mapStickyNoteRow(note: {
+  id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}): VendorStickyNote {
+  return {
+    id: note.id,
+    body: note.body,
+    createdAt: note.created_at,
+    updatedAt: note.updated_at,
+  };
+}
+
+async function fetchStickyNotesByVendor(
+  organizationId: string
+): Promise<Map<string, VendorStickyNote[]>> {
+  const { data, error } = await requireSupabase()
+    .from("vendor_sticky_notes")
+    .select("id, vendor_id, body, created_at, updated_at")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message + stickyNoteSetupHintFromError(error.message));
+  }
+
+  const byVendor = new Map<string, VendorStickyNote[]>();
+  for (const row of data ?? []) {
+    const note = mapStickyNoteRow(row);
+    const list = byVendor.get(row.vendor_id) ?? [];
+    list.push(note);
+    byVendor.set(row.vendor_id, list);
+  }
+  return byVendor;
 }
 
 export async function fetchVendors(organizationId: string): Promise<Vendor[]> {
@@ -251,8 +319,70 @@ export async function fetchVendors(organizationId: string): Promise<Vendor[]> {
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return (data as VendorRow[]).map(mapVendor);
+  if (error) {
+    throw new Error(error.message + stickyNoteSetupHintFromError(error.message));
+  }
+
+  const vendors = (data as VendorRow[]).map(mapVendor);
+
+  try {
+    // Load notes separately — more reliable than PostgREST embeds for this table.
+    const notesByVendor = await fetchStickyNotesByVendor(organizationId);
+    return vendors.map((vendor) => ({
+      ...vendor,
+      stickyNotes: notesByVendor.get(vendor.id) ?? [],
+    }));
+  } catch (notesError) {
+    // Keep vendors usable even if sticky-note table is not migrated yet.
+    if (import.meta.env.DEV) {
+      console.warn(notesError);
+    }
+    return vendors;
+  }
+}
+
+export async function createVendorStickyNote(
+  organizationId: string,
+  vendorId: string,
+  body = ""
+): Promise<VendorStickyNote> {
+  const { data, error } = await requireSupabase()
+    .from("vendor_sticky_notes")
+    .insert({
+      organization_id: organizationId,
+      vendor_id: vendorId,
+      body: body.trim(),
+    })
+    .select("id, body, created_at, updated_at")
+    .single();
+
+  if (error || !data) {
+    const message = error?.message ?? "Could not create note.";
+    throw new Error(message + stickyNoteSetupHintFromError(message));
+  }
+
+  return mapStickyNoteRow(data);
+}
+
+export async function updateVendorStickyNote(noteId: string, body: string): Promise<VendorStickyNote> {
+  const { data, error } = await requireSupabase()
+    .from("vendor_sticky_notes")
+    .update({ body: body.trim(), updated_at: new Date().toISOString() })
+    .eq("id", noteId)
+    .select("id, body, created_at, updated_at")
+    .single();
+
+  if (error || !data) {
+    const message = error?.message ?? "Could not save note.";
+    throw new Error(message + stickyNoteSetupHintFromError(message));
+  }
+
+  return mapStickyNoteRow(data);
+}
+
+export async function deleteVendorStickyNote(noteId: string): Promise<void> {
+  const { error } = await requireSupabase().from("vendor_sticky_notes").delete().eq("id", noteId);
+  if (error) throw new Error(error.message + stickyNoteSetupHintFromError(error.message));
 }
 
 export async function createVendor(
@@ -438,6 +568,117 @@ export async function updateContract(
   if (!data) throw new Error("Contract update did not persist. Refresh and try again.");
 
   return mapContractRow(data as ContractRow);
+}
+
+const CONTRACT_ROW_SELECT =
+  "id, title, start_date, end_date, renewal_date, renewal_type, notice_period_days, term_months, value, status, created_at, renewal_handled_at, renewal_handled_note, file_url, file_name, file_size, mime_type";
+
+export async function attachFileToContract(
+  contractId: string,
+  file: FileAttachment
+): Promise<Contract> {
+  if (!contractId.trim()) {
+    throw new Error("No contract selected. Refresh and try again.");
+  }
+
+  const fileUrl = assertValidStorageFileUrl(file.fileUrl);
+  const client = requireSupabase();
+  const { data: existing, error: existingError } = await client
+    .from("contracts")
+    .select("file_url")
+    .eq("id", contractId)
+    .maybeSingle();
+
+  if (existingError) throw new Error(existingError.message);
+  if (!existing) throw new Error("Contract not found. Refresh and try again.");
+
+  const previousFileUrl = existing.file_url as string | null;
+
+  const { data, error } = await client
+    .from("contracts")
+    .update({
+      file_url: fileUrl,
+      file_name: file.fileName,
+      file_size: file.fileSize,
+      mime_type: file.mimeType,
+    })
+    .eq("id", contractId)
+    .select(CONTRACT_ROW_SELECT)
+    .single();
+
+  if (error) {
+    if (/row-level security|permission denied|not authorized/i.test(error.message)) {
+      throw new Error(
+        "You don't have permission to edit contracts in this workspace. Confirm you're signed in as an owner, admin, or member."
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Contract file update did not persist. Refresh and try again.");
+
+  if (previousFileUrl && previousFileUrl !== fileUrl) {
+    await removeOrgStorageFileFromUrl(previousFileUrl);
+  }
+
+  return mapContractRow(data as ContractRow);
+}
+
+export async function uploadAndAttachContractFile(
+  organizationId: string,
+  vendorId: string,
+  contractId: string,
+  file: File
+): Promise<Contract> {
+  const uploaded = await uploadOrgFile(organizationId, vendorId, file);
+  try {
+    return await attachFileToContract(contractId, {
+      fileName: file.name,
+      fileSize: file.size,
+      fileUrl: uploaded.fileUrl,
+      mimeType: file.type || "application/octet-stream",
+    });
+  } catch (error) {
+    await removeOrgFile(uploaded.path);
+    throw error;
+  }
+}
+
+/** Upload a PDF/file as a vendor contract attachment — attach to a file-less contract when possible. */
+export async function uploadSetupContractDocument(
+  organizationId: string,
+  vendorId: string,
+  file: File,
+  contracts: Contract[]
+): Promise<Contract> {
+  const fileLess = contracts.find((contract) => !contract.file);
+  if (fileLess) {
+    return uploadAndAttachContractFile(organizationId, vendorId, fileLess.id, file);
+  }
+
+  const uploaded = await uploadOrgFile(organizationId, vendorId, file);
+  try {
+    const baseName = file.name.replace(/\.[^.]+$/, "").trim() || "Uploaded contract";
+    return await addContract(organizationId, vendorId, {
+      name: baseName,
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: null,
+      renewalDate: null,
+      renewalType: "fixed_term",
+      noticePeriodDays: null,
+      termMonths: null,
+      value: 0,
+      status: "active",
+      file: {
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: uploaded.fileUrl,
+        mimeType: file.type || "application/octet-stream",
+      },
+    });
+  } catch (error) {
+    await removeOrgFile(uploaded.path);
+    throw error;
+  }
 }
 
 export async function deleteContract(contractId: string) {

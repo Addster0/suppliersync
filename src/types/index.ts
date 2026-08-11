@@ -10,6 +10,21 @@ export type Contact = {
   phone: string;
 };
 
+/** Outbound CRM email to a vendor contact (relationship history). */
+export type VendorEmailMessage = {
+  id: string;
+  contactId: string | null;
+  toEmail: string;
+  toName: string;
+  subject: string;
+  bodyText: string;
+  status: "sent" | "failed";
+  errorMessage: string | null;
+  resendEmailId: string | null;
+  sentBy: string;
+  sentAt: string;
+};
+
 export type FileAttachment = {
   fileName: string;
   fileSize: number;
@@ -80,16 +95,25 @@ export type Experiment = {
   status: "idea" | "testing" | "keeper";
 };
 
+export type VendorStickyNote = {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Vendor = {
   id: string;
   directoryId?: string;
   name: string;
   category: string;
   status: Status;
+  /** @deprecated Legacy field — use stickyNotes. */
   notes: string;
   notesLocked?: boolean;
   address: string;
   createdAt?: string;
+  stickyNotes: VendorStickyNote[];
   contacts: Contact[];
   contracts: Contract[];
   ledger: LedgerEntry[];
@@ -127,6 +151,29 @@ export type OrganizationMembership = {
 };
 
 export type RenewalUrgency = "overdue" | "soon" | "upcoming";
+
+export type InsuranceContract = {
+  id: string;
+  title: string;
+  policyNumber: string;
+  startDate: string;
+  endDate: string;
+  credentialingStatus: string;
+  notes: string;
+  file?: FileAttachment;
+};
+
+export type InsurancePayer = {
+  id: string;
+  name: string;
+  payerType: string;
+  status: Status;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  primaryContactPhone: string;
+  notes: string;
+  contracts: InsuranceContract[];
+};
 
 export type RenewalItem = {
   contractId: string;

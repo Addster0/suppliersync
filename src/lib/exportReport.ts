@@ -29,6 +29,15 @@ function orgSlug(orgName: string): string {
     .slice(0, 48);
 }
 
+function renderVendorNotes(vendor: Vendor): string {
+  const notes = (vendor.stickyNotes ?? []).filter((note) => note.body.trim());
+  if (!notes.length && !vendor.notes.trim()) return "";
+  if (notes.length) {
+    return notes.map((note) => `<p>${escapeHtml(note.body)}</p>`).join("");
+  }
+  return `<p>${escapeHtml(vendor.notes)}</p>`;
+}
+
 export function organizationReportFilename(orgName: string, exportedAt = new Date()): string {
   const date = exportedAt.toISOString().slice(0, 10);
   return `suppliersync-report-${orgSlug(orgName) || "workspace"}-${date}.html`;
@@ -158,7 +167,7 @@ function renderVendorBlock(vendor: Vendor): string {
   return `<section class="vendor-block">
     <h3>${escapeHtml(vendor.name)}</h3>
     <p class="muted">${escapeHtml(vendor.category)} · <span class="pill">${escapeHtml(vendor.status)}</span>${vendor.address ? ` · ${escapeHtml(vendor.address)}` : ""}${ytdSpend > 0 ? ` · YTD spend ${escapeHtml(money(ytdSpend))}` : ""}</p>
-    ${vendor.notes ? `<p>${escapeHtml(vendor.notes)}</p>` : ""}
+    ${renderVendorNotes(vendor)}
 
     <h4 style="font-size:14px;color:#475569;margin:16px 0 6px;">Contacts (${vendor.contacts.length})</h4>
     ${renderContacts(vendor)}

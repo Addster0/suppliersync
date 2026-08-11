@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { checkAndLogExtractUsage } from "../_shared/apiUsageLimit.ts";
+import { requireAuthenticatedUser } from "../_shared/requireAuthenticated.ts";
+import { extractContractFromPdf } from "./contractExtractCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,20 +39,6 @@ const EXTRACT_DOCUMENT_TYPE_LABELS: Record<ExtractDocumentType, string> = {
   other: "Other Document",
 };
 
-type ExtractedContract = {
-  name: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  renewalDate: string | null;
-  renewalType: "fixed_term" | "auto_renew" | "month_to_month" | "evergreen" | null;
-  noticePeriodDays: number | null;
-  termMonths: number | null;
-  value: number | null;
-  autoRenew: boolean | null;
-  documentType: ExtractDocumentType | null;
-  documentTypeLabel: string | null;
-};
-
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -66,155 +54,6 @@ function notConfiguredResponse() {
   });
 }
 
-function isIsoDate(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function parseFlexibleDate(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const trimmed = value.trim();
-  if (isIsoDate(trimmed)) return trimmed;
-
-  const isoPrefix = trimmed.match(/^(\d{4}-\d{2}-\d{2})T/);
-  if (isoPrefix) return isoPrefix[1];
-
-  const usMatch = trimmed.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
-  if (usMatch) {
-    const month = usMatch[1].padStart(2, "0");
-    const day = usMatch[2].padStart(2, "0");
-    const year = usMatch[3].length === 2 ? `20${usMatch[3]}` : usMatch[3];
-    return `${year}-${month}-${day}`;
-  }
-
-  const parsed = Date.parse(trimmed);
-  if (!Number.isNaN(parsed)) {
-    const date = new Date(parsed);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  return null;
-}
-
-function parseRenewalType(value: unknown): ExtractedContract["renewalType"] {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  const allowed = ["fixed_term", "auto_renew", "month_to_month", "evergreen"] as const;
-  return (allowed as readonly string[]).includes(normalized)
-    ? (normalized as ExtractedContract["renewalType"])
-    : null;
-}
-
-function parsePositiveInt(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.round(value);
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(parsed) && parsed > 0) return Math.round(parsed);
-  }
-  return null;
-}
-
-function parseNonNegativeInt(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return Math.round(value);
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(parsed) && parsed >= 0) return Math.round(parsed);
-  }
-  return null;
-}
-
-function normalizeExtracted(raw: Record<string, unknown>): ExtractedContract {
-  const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : null;
-  const startDate = parseFlexibleDate(raw.startDate);
-  const endDate = parseFlexibleDate(raw.endDate);
-  const renewalDate = parseFlexibleDate(raw.renewalDate);
-
-  let value: number | null = null;
-  if (typeof raw.value === "number" && Number.isFinite(raw.value) && raw.value >= 0) {
-    value = raw.value;
-  } else if (typeof raw.value === "string") {
-    const parsed = Number(raw.value.replace(/[^0-9.-]/g, ""));
-    if (Number.isFinite(parsed) && parsed >= 0) value = parsed;
-  }
-
-  let autoRenew: boolean | null = null;
-  if (typeof raw.autoRenew === "boolean") {
-    autoRenew = raw.autoRenew;
-  }
-
-  let renewalType = parseRenewalType(raw.renewalType);
-  if (!renewalType && autoRenew === true) renewalType = "auto_renew";
-  if (!renewalType && autoRenew === false && !endDate) renewalType = "evergreen";
-  if (!renewalType && endDate) renewalType = "fixed_term";
-
-  const noticePeriodDays = parseNonNegativeInt(raw.noticePeriodDays);
-  const termMonths = parsePositiveInt(raw.termMonths);
-
-  let documentType: ExtractDocumentType | null = null;
-  if (typeof raw.documentType === "string") {
-    const normalized = raw.documentType.trim().toLowerCase().replace(/[\s-]+/g, "_");
-    if ((EXTRACT_DOCUMENT_TYPES as readonly string[]).includes(normalized)) {
-      documentType = normalized as ExtractDocumentType;
-    }
-  }
-
-  let documentTypeLabel: string | null = null;
-  if (typeof raw.documentTypeLabel === "string" && raw.documentTypeLabel.trim()) {
-    documentTypeLabel = raw.documentTypeLabel.trim();
-  } else if (documentType) {
-    documentTypeLabel = EXTRACT_DOCUMENT_TYPE_LABELS[documentType];
-  }
-
-  return {
-    name,
-    startDate,
-    endDate,
-    renewalDate,
-    renewalType,
-    noticePeriodDays,
-    termMonths,
-    value,
-    autoRenew,
-    documentType,
-    documentTypeLabel,
-  };
-}
-
-const EXTRACTION_PROMPT = `Extract document metadata from this PDF. Return JSON only with these keys:
-- name: document or contract title (string or null)
-- startDate: start or effective date as YYYY-MM-DD (string or null)
-- endDate: fixed term end or current term expiry as YYYY-MM-DD (string or null). Use null for evergreen/month-to-month with no fixed end.
-- renewalDate: review or notice deadline as YYYY-MM-DD (string or null). For auto-renew contracts, this is when notice must be given (e.g. 90 days before renewal).
-- renewalType: one of "fixed_term", "auto_renew", "month_to_month", "evergreen"
-- noticePeriodDays: days of advance notice required to cancel or non-renew (integer or null, e.g. 90)
-- termMonths: initial or renewal term length in months (integer or null, e.g. 12)
-- value: contract or invoice amount in USD as a number without currency symbols (number or null)
-- autoRenew: true if the agreement auto-renews, false if it does not, null if unclear (legacy — prefer renewalType)
-- documentType: one of "service_agreement", "baa", "coi", "w9", "invoice", "other"
-- documentTypeLabel: human-readable label for documentType (e.g. "Service Agreement", "Certificate of Insurance (COI)")
-
-Renewal type guidance:
-- fixed_term: agreement ends on a specific date with no automatic renewal
-- auto_renew: renews unless notice is given (look for "automatically renew", "evergreen unless terminated", "successive terms")
-- month_to_month: cancellable on short notice, no long fixed term
-- evergreen: ongoing with no fixed end date
-
-Document type guidance:
-- service_agreement: vendor/service contracts, MSAs, SOWs, subscription agreements
-- baa: business associate agreements, HIPAA BAAs
-- coi: certificates of insurance, liability insurance proofs
-- w9: IRS W-9 or tax withholding forms
-- invoice: invoices, bills, statements of charges
-- other: anything else
-
-Use null when a field cannot be determined confidently. Prefer explicit term or expiry dates over signature dates. If auto-renewing with a notice period and term length, compute renewalDate as the notice deadline before the next renewal when possible.`;
-
 function isPdfBase64(fileBase64: string): boolean {
   try {
     const binary = atob(fileBase64.slice(0, 12));
@@ -224,71 +63,13 @@ function isPdfBase64(fileBase64: string): boolean {
   }
 }
 
-async function extractWithOpenAI(params: {
-  apiKey: string;
-  fileName: string;
-  fileBase64: string;
-}): Promise<ExtractedContract> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You extract structured metadata from vendor PDF documents (contracts, compliance forms, invoices). Respond with valid JSON only.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "file",
-              file: {
-                filename: params.fileName,
-                file_data: `data:application/pdf;base64,${params.fileBase64}`,
-              },
-            },
-            { type: "text", text: EXTRACTION_PROMPT },
-          ],
-        },
-      ],
-      temperature: 0.1,
-    }),
-  });
-
-  if (!response.ok) {
-    let message = await response.text();
-    try {
-      const parsed = JSON.parse(message) as { error?: { message?: string } };
-      message = parsed.error?.message ?? message;
-    } catch {
-      // Keep raw response text when OpenAI does not return JSON.
-    }
-    throw new Error(`OpenAI error (${response.status}): ${message}`);
+function normalizeDocumentType(value: string | null): ExtractDocumentType | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if ((EXTRACT_DOCUMENT_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as ExtractDocumentType;
   }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("OpenAI returned an empty response.");
-  }
-
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    throw new Error("OpenAI returned invalid JSON.");
-  }
-
-  return normalizeExtracted(parsed);
+  return null;
 }
 
 async function requireOrgMember(req: Request, organizationId: string) {
@@ -357,6 +138,9 @@ Deno.serve(async (req) => {
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
 
   if (mode === "status") {
+    const auth = await requireAuthenticatedUser(req, corsHeaders, jsonResponse);
+    if ("error" in auth && auth.error) return auth.error;
+
     return jsonResponse({
       configured: Boolean(openaiKey),
       error: openaiKey
@@ -398,21 +182,37 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "File content is not a valid PDF." }, 400);
   }
 
-  const rateLimit = await checkAndLogExtractUsage(access.userClient!, organizationId, "extract-contract");
+  const rateLimit = await checkAndLogExtractUsage(access.user.id, organizationId, "extract-contract");
   if (!rateLimit.allowed) {
     return jsonResponse({ error: rateLimit.message }, rateLimit.status);
   }
 
   try {
-    const extracted = await extractWithOpenAI({
+    const extracted = await extractContractFromPdf({
       apiKey: openaiKey,
       fileName,
       fileBase64,
     });
 
+    const documentType = normalizeDocumentType(extracted.documentType);
+    const documentTypeLabel =
+      extracted.documentTypeLabel?.trim() ||
+      (documentType ? EXTRACT_DOCUMENT_TYPE_LABELS[documentType] : null);
+
     return jsonResponse({
       configured: true,
-      ...extracted,
+      name: extracted.name,
+      startDate: extracted.startDate,
+      endDate: extracted.endDate,
+      renewalDate: extracted.renewalDate,
+      renewalType: extracted.renewalType,
+      noticePeriodDays: extracted.noticePeriodDays,
+      termMonths: extracted.termMonths,
+      value: extracted.value,
+      autoRenew: extracted.autoRenew,
+      documentType,
+      documentTypeLabel,
+      extractHints: extracted.extractHints,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Contract extraction failed.";

@@ -136,7 +136,11 @@ export type OnboardingStep = {
 export function buildOnboardingSteps(vendors: Vendor[]): OnboardingStep[] {
   const hasVendor = vendors.length > 0;
   const hasContract = vendors.some((vendor) => vendor.contracts.length > 0);
-  const hasDocument = vendors.some((vendor) => vendor.documents.length > 0);
+  const hasContractFile = vendors.some((vendor) =>
+    vendor.contracts.some((contract) => Boolean(contract.file))
+  );
+  const hasDocument =
+    vendors.some((vendor) => vendor.documents.length > 0) || hasContractFile;
   const hasSpend = vendors.some((vendor) => vendor.ledger.length > 0);
   const firstVendorId = vendors[0]?.id ?? "";
 
@@ -157,7 +161,9 @@ export function buildOnboardingSteps(vendors: Vendor[]): OnboardingStep[] {
       id: "document",
       label: "Upload a compliance or contract document",
       done: hasDocument,
-      href: firstVendorId ? `/app?vendor=${firstVendorId}&tab=documents` : "/app",
+      href: firstVendorId
+        ? `/app?vendor=${firstVendorId}&tab=${hasContractFile ? "contracts" : "documents"}`
+        : "/app",
     },
     {
       id: "spend",

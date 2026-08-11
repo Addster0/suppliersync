@@ -5,7 +5,8 @@ import {
 } from "@supabase/supabase-js";
 import type { ExtractDocumentType } from "../lib/documentTypes";
 import { parseFlexibleDate } from "../lib/documentTypes";
-import { requireSupabase, supabaseAnonKey, supabaseUrl } from "../lib/supabase";
+import { enrichContractExtractResult } from "../lib/contractExtractEnrich";
+import { requireSupabase } from "../lib/supabase";
 
 export type ContractExtractResult = {
   configured: boolean;
@@ -20,6 +21,7 @@ export type ContractExtractResult = {
   autoRenew?: boolean | null;
   documentType?: ExtractDocumentType | null;
   documentTypeLabel?: string | null;
+  extractHints?: string[];
   error?: string;
 };
 
@@ -38,12 +40,13 @@ function parsePayload<T extends ContractExtractResult>(data: unknown): T {
 }
 
 function normalizeContractExtractResult(result: ContractExtractResult): ContractExtractResult {
-  return {
+  const parsed: ContractExtractResult = {
     ...result,
     startDate: parseFlexibleDate(result.startDate) ?? result.startDate ?? null,
     endDate: parseFlexibleDate(result.endDate) ?? result.endDate ?? null,
     renewalDate: parseFlexibleDate(result.renewalDate) ?? result.renewalDate ?? null,
   };
+  return enrichContractExtractResult(parsed);
 }
 
 async function functionInvokeErrorMessage(error: unknown): Promise<string> {
@@ -115,44 +118,32 @@ async function invokeExtractContract<T extends ContractExtractResult>(
 }
 
 export async function fetchContractExtractStatus(): Promise<ContractExtractStatus> {
-  const url = supabaseUrl?.trim();
-  const apiKey = supabaseAnonKey?.trim();
-  if (!url || !apiKey) {
+  const {
+    data: { session },
+  } = await requireSupabase().auth.getSession();
+
+  if (!session) {
     return {
       configured: false,
       reachable: false,
-      error: "Supabase is not configured.",
+      error: "Sign in to check AI extraction status.",
     };
   }
 
   try {
-    const response = await fetch(`${url.replace(/\/$/, "")}/functions/v1/extract-contract`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: apiKey,
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ mode: "status" }),
+    const { data, error } = await requireSupabase().functions.invoke("extract-contract", {
+      body: { mode: "status" },
     });
 
-    if (response.status === 404) {
+    if (error) {
       return {
         configured: false,
         reachable: false,
-        error: "AI extraction is not deployed. Run ./scripts/setup-contract-extract.sh.",
+        error: await functionInvokeErrorMessage(error),
       };
     }
 
-    const payload = (await response.json()) as ContractExtractStatus;
-    if (!response.ok) {
-      return {
-        configured: false,
-        reachable: false,
-        error: payload?.error ?? "Could not reach AI extraction.",
-      };
-    }
-
+    const payload = data as ContractExtractStatus;
     return {
       configured: Boolean(payload?.configured),
       error: payload?.error,

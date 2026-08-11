@@ -661,6 +661,14 @@ button:disabled:hover {
 .vendor-notes-editor-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vendor-notes-editor-title {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
 
@@ -688,6 +696,89 @@ button:disabled:hover {
 
 .vendor-notes-hint {
   margin: 0;
+}
+
+.vendor-notes-empty {
+  margin: 0;
+}
+
+.sticky-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.sticky-note-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-radius: 4px 14px 14px 14px;
+  background: linear-gradient(145deg, #fef9c3 0%, #fef08a 100%);
+  border: 1px solid #fde047;
+  box-shadow: 2px 3px 10px rgba(15, 23, 42, 0.08);
+  min-height: 120px;
+}
+
+.sticky-note-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #422006;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sticky-note-meta {
+  margin: 0;
+}
+
+.sticky-note-textarea {
+  min-height: 96px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.65);
+  border-color: #facc15;
+}
+
+.sticky-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sticky-note-add {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.sticky-note-add-card {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 14px;
+  border-radius: 4px 14px 14px 14px;
+  border: 2px dashed #ca8a04;
+  background: rgba(254, 249, 195, 0.45);
+  color: #854d0e;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.sticky-note-add-card:hover:not(:disabled) {
+  background: rgba(254, 240, 138, 0.7);
+  transform: translateY(-1px);
+}
+
+.sticky-note-add-card:disabled {
+  opacity: 0.55;
+}
+
+.sticky-note-add-card-plus {
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
 }
 
 .card.highlight { background: #eff6ff; border-color: #bfdbfe; }
@@ -1736,6 +1827,213 @@ a.file-attachment-link:hover {
   background: #ecfdf5;
   border: 1px solid #6ee7b7;
   color: #065f46;
+}
+
+.contract-loss-badge {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  background: linear-gradient(180deg, #fff7ed 0%, #fef2f2 100%);
+  color: #9a3412;
+  cursor: pointer;
+  font: inherit;
+  min-width: 120px;
+}
+
+.contract-loss-badge:hover {
+  border-color: #fca5a5;
+}
+
+.contract-loss-badge__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.contract-loss-badge strong {
+  font-size: 14px;
+  color: #b91c1c;
+}
+
+.contract-loss-modal {
+  width: min(480px, 100%);
+}
+
+.contract-loss-modal-stat {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  margin-bottom: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.contract-loss-modal-stat__label {
+  font-size: 12px;
+  color: #9a3412;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.contract-loss-modal-stat strong {
+  font-size: 24px;
+  color: #c2410c;
+}
+
+.contract-loss-modal-math {
+  margin-top: 8px;
+}
+
+.renewal-row-loss {
+  display: inline-flex;
+}
+
+.renewal-loss-trigger {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid #fecaca;
+  background: linear-gradient(180deg, #fff7ed 0%, #fef2f2 100%);
+  color: #9a3412;
+  cursor: pointer;
+  font: inherit;
+}
+
+.renewal-loss-trigger:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: linear-gradient(180deg, #ffedd5 0%, #fee2e2 100%);
+}
+
+.renewal-loss-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.renewal-loss-trigger-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.renewal-loss-trigger strong {
+  font-size: 18px;
+  color: #b91c1c;
+}
+
+.renewal-loss-trigger--compact {
+  min-width: 160px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  background: white;
+  border-color: #fecaca;
+}
+
+.renewal-loss-modal .renewal-loss-hero {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 0.8fr;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.renewal-loss-stat {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: grid;
+  gap: 4px;
+}
+
+.renewal-loss-stat--primary {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.renewal-loss-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.renewal-loss-stat strong {
+  font-size: 24px;
+}
+
+.renewal-loss-stat--primary strong {
+  color: #c2410c;
+}
+
+.renewal-loss-breakdown-label {
+  margin-bottom: 10px;
+}
+
+.renewal-loss-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.renewal-loss-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.renewal-loss-item-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.renewal-loss-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.renewal-loss-item-amount {
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.renewal-loss-item-math {
+  font-size: 12px;
+}
+
+.renewal-loss-empty {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.renewal-loss-disclaimer {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 900px) {
+  .renewal-loss-modal .renewal-loss-hero {
+    grid-template-columns: 1fr;
+  }
 }
 
 .renewals-email-banner--warn {
@@ -4377,5 +4675,117 @@ button.doc-title-button:hover {
   .outreach-stage-guide-row {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+/* CRM relationship email (vendor contacts) */
+.vendor-email-panel {
+  margin-top: 28px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.vendor-email-panel__head h3 {
+  margin: 0;
+}
+
+.vendor-email-panel__head .muted {
+  margin: 6px 0 0;
+}
+
+.vendor-email-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.vendor-email-send-btn {
+  min-height: 40px;
+}
+
+.vendor-email-compose {
+  margin-top: 12px;
+}
+
+.vendor-email-compose__to {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.vendor-email-compose__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.vendor-email-compose__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.vendor-email-history {
+  margin-top: 20px;
+}
+
+.vendor-email-history__title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.vendor-email-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.vendor-email-history__list li {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.vendor-email-history__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.vendor-email-history__body {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: #334155;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.vendor-email-status {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vendor-email-status--sent {
+  color: #15803d;
+}
+
+.vendor-email-status--failed {
+  color: #b91c1c;
+}
+
+@media (max-width: 700px) {
+  .vendor-email-compose__to,
+  .vendor-email-compose__hint {
+    grid-column: auto;
   }
 }

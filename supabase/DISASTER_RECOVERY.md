@@ -36,7 +36,7 @@ These are planning estimates, not SLAs. There is no on-call team or hot standby.
 | **Vercel frontend** | Redeploy from git; env vars live in Vercel project settings. |
 | **Stripe / Resend / OpenAI** | Provider-side data (customers, subscriptions, sent email logs). Stripe subscriptions survive; webhook endpoint URL may need updating if project URL changes. |
 | **Local uncommitted code** | **Git is the source of truth.** Push to `main` regularly. Uncommitted work on one machine is not recoverable from Supabase. |
-| **pg_cron jobs** | Not always included in restore. Re-schedule `purge-api-usage-log` per [DATA_RETENTION.md](./DATA_RETENTION.md#scheduled-jobs). |
+| **pg_cron jobs** | Not always included in restore. Re-schedule `purge-api-usage-log` per [DATA_RETENTION.md](./DATA_RETENTION.md#scheduled-jobs) and renewal reminder jobs via `./scripts/setup-renewal-cron.sh` / [RENEWAL_EMAIL_SETUP.md](./RENEWAL_EMAIL_SETUP.md). |
 | **Private DB settings** | `private.signup_notify_settings` and `private.founding_notify_settings` — re-run setup scripts if notification webhooks stop firing. |
 
 ---
@@ -73,7 +73,7 @@ This gives you schema + RLS but **no production data**.
 After any DB restore:
 
 1. **Storage bucket** — run [STORAGE_SETUP.sql](./STORAGE_SETUP.sql) Step A then Step B in SQL Editor (bucket is not in DB backups).
-2. **pg_cron purge** — schedule `purge-api-usage-log` per [DATA_RETENTION.md](./DATA_RETENTION.md#scheduled-jobs).
+2. **pg_cron purge + renewal emails** — schedule `purge-api-usage-log` per [DATA_RETENTION.md](./DATA_RETENTION.md#scheduled-jobs); re-enable renewal cron with `./scripts/setup-renewal-cron.sh`.
 3. **Notification webhooks** — if signup/founding emails fail, re-run `./scripts/setup-signup-notify.sh` and `./scripts/setup-founding-notify.sh` (sets `private.*_notify_settings`).
 
 If restore predates recent migrations, apply pending files in `supabase/migrations/` via `npx supabase db push`.

@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { FormEvent, useId, useState } from "react";
 import { DocumentViewerModal } from "./DocumentViewerModal";
+import { ContractRenewalLossBadge } from "./ContractRenewalLossBadge";
 import { FileAttachmentLink } from "./FileAttachmentLink";
 import type { RenewalItem } from "../types";
+import { calculateRenewalItemLoss } from "../lib/renewalLossCalculator";
 import { formatDaysUntil, vendorContractsUrl } from "../lib/renewals";
 import { getStatusClass, hasDownloadableFile, money, prettyDate } from "../lib/utils";
 
@@ -10,16 +12,19 @@ export function RenewalRow({
   item,
   handled = false,
   canMarkHandled = false,
+  medianContractValue = 0,
   onMarkHandled,
   onReopen,
 }: {
   item: RenewalItem;
   handled?: boolean;
   canMarkHandled?: boolean;
+  medianContractValue?: number;
   onMarkHandled?: (contractId: string, note: string) => Promise<void>;
   onReopen?: (contractId: string) => Promise<void>;
 }) {
   const hasFile = Boolean(item.fileUrl && item.fileName && hasDownloadableFile(item.fileUrl));
+  const renewalLoss = calculateRenewalItemLoss({ item, medianValue: medianContractValue });
   const [viewingFile, setViewingFile] = useState(false);
   const [showHandleForm, setShowHandleForm] = useState(false);
   const [handleNote, setHandleNote] = useState("");
@@ -72,6 +77,34 @@ export function RenewalRow({
           )}
         </div>
         <div className="renewal-row-meta">
+          {!handled && renewalLoss && (
+            <span
+              className="renewal-row-loss"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <ContractRenewalLossBadge
+              contract={{
+                id: item.contractId,
+                name: item.contractName,
+                startDate: item.actionDate,
+                endDate: item.renewalType === "fixed_term" ? item.actionDate : null,
+                renewalDate: item.renewalType !== "fixed_term" ? item.actionDate : null,
+                renewalType: item.renewalType,
+                noticePeriodDays: null,
+                termMonths: null,
+                value: item.value,
+                status: item.status,
+                renewalHandledAt: item.renewalHandledAt,
+              }}
+              lineItem={renewalLoss}
+              medianContractValue={medianContractValue}
+                vendor={{ id: item.vendorId, name: item.vendorName }}
+              />
+            </span>
+          )}
           {!handled && (
             <span className={`renewal-urgency renewal-urgency--${item.urgency}`}>
               {formatDaysUntil(item.daysUntilEnd, item.renewalType)}

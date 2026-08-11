@@ -5,7 +5,7 @@ import {
 } from "@supabase/supabase-js";
 import type { ExtractDocumentType } from "../lib/documentTypes";
 import { normalizeDocumentExtractResult } from "../lib/documentTypes";
-import { requireSupabase, supabaseAnonKey, supabaseUrl } from "../lib/supabase";
+import { requireSupabase } from "../lib/supabase";
 import { resolveStorageUrl } from "./vendors";
 
 export type DocumentExtractResult = {
@@ -100,44 +100,32 @@ async function invokeExtractDocument<T extends DocumentExtractResult>(
 }
 
 export async function fetchDocumentExtractStatus(): Promise<DocumentExtractStatus> {
-  const url = supabaseUrl?.trim();
-  const apiKey = supabaseAnonKey?.trim();
-  if (!url || !apiKey) {
+  const {
+    data: { session },
+  } = await requireSupabase().auth.getSession();
+
+  if (!session) {
     return {
       configured: false,
       reachable: false,
-      error: "Supabase is not configured.",
+      error: "Sign in to check AI document reading status.",
     };
   }
 
   try {
-    const response = await fetch(`${url.replace(/\/$/, "")}/functions/v1/extract-document`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: apiKey,
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ mode: "status" }),
+    const { data, error } = await requireSupabase().functions.invoke("extract-document", {
+      body: { mode: "status" },
     });
 
-    if (response.status === 404) {
+    if (error) {
       return {
         configured: false,
         reachable: false,
-        error: "AI document reading is not deployed. Run ./scripts/setup-document-extract.sh.",
+        error: await functionInvokeErrorMessage(error),
       };
     }
 
-    const payload = (await response.json()) as DocumentExtractStatus;
-    if (!response.ok) {
-      return {
-        configured: false,
-        reachable: false,
-        error: payload?.error ?? "Could not reach AI document reading.",
-      };
-    }
-
+    const payload = data as DocumentExtractStatus;
     return {
       configured: Boolean(payload?.configured),
       error: payload?.error,

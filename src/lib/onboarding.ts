@@ -23,8 +23,14 @@ export function buildSetupSteps(
     vendor.contracts.some((contract) => Boolean(getContractActionDate(contract)))
   );
   const hasContact = vendors.some((vendor) => vendor.contacts.length > 0);
-  const hasDocument = vendors.some((vendor) => vendor.documents.length > 0);
+  const hasDocument = vendors.some(
+    (vendor) =>
+      vendor.documents.length > 0 || vendor.contracts.some((contract) => Boolean(contract.file))
+  );
   const firstVendorId = vendors[0]?.id ?? "";
+  const hasContractFile = vendors.some((vendor) =>
+    vendor.contracts.some((contract) => Boolean(contract.file))
+  );
 
   return [
     {
@@ -57,11 +63,14 @@ export function buildSetupSteps(
     },
     {
       id: "document",
-      label: "Upload a compliance document",
-      description: "COI, W-9, or a contract PDF — optional, but recommended for compliance tracking.",
+      label: "Upload a contract or compliance document",
+      description:
+        "Attach a contract PDF to Contracts, or upload a COI/W-9 for compliance tracking — optional, but recommended.",
       done: hasDocument || documentSkipped,
       optional: true,
-      href: firstVendorId ? `/app?vendor=${firstVendorId}&tab=documents` : "/app",
+      href: firstVendorId
+        ? `/app?vendor=${firstVendorId}&tab=${hasContractFile ? "contracts" : "documents"}`
+        : "/app",
     },
   ];
 }
@@ -72,6 +81,10 @@ export function countCompletedSetupSteps(steps: SetupStep[]) {
 
 export function isSetupComplete(steps: SetupStep[]) {
   return steps.every((step) => step.done);
+}
+
+export function areRequiredSetupStepsDone(steps: SetupStep[]) {
+  return steps.filter((step) => !step.optional).every((step) => step.done);
 }
 
 export function firstIncompleteSetupStep(steps: SetupStep[]) {

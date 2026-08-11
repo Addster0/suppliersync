@@ -1,6 +1,10 @@
 node_modules
 dist
+.env
 .env.local
 .env*.local
 .vercel
 supabase/.temp/
+recovery-codes.txt
+*.report.html
+GitHub Desktop.app/

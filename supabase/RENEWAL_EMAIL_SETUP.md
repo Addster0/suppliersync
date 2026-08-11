@@ -64,41 +64,73 @@ Or use `./scripts/setup-renewal-email.sh`.
 supabase functions deploy send-renewal-reminders
 ```
 
-## 4. Schedule daily sends (optional)
+## 4. Auto-schedule daily sends (required for production)
 
-**Contract reminders** (90 / 30 / 7 / due today):
+SupplierSync uses **pg_cron + pg_net** (same pattern as signup notify) to call the edge function with no human action.
+
+1. Apply migration **036** (`supabase/migrations/036_renewal_reminder_cron.sql`) if not already applied.
+2. Deploy the function **without JWT verification** (cron auth is `x-cron-secret` only):
+
+```bash
+supabase functions deploy send-renewal-reminders --no-verify-jwt
+```
+
+3. Run the one-shot enabler (sets `CRON_SECRET`, deploys, enables DB settings):
+
+```bash
+chmod +x scripts/setup-renewal-cron.sh
+./scripts/setup-renewal-cron.sh
+```
+
+Or set secrets yourself, then enable settings:
+
+```sql
+insert into private.renewal_cron_settings (id, edge_function_url, cron_secret, enabled)
+values (
+  1,
+  'https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders',
+  'YOUR_CRON_SECRET',  -- must match edge secret CRON_SECRET
+  true
+)
+on conflict (id) do update
+set
+  edge_function_url = excluded.edge_function_url,
+  cron_secret = excluded.cron_secret,
+  enabled = excluded.enabled;
+```
+
+### Schedule (UTC — Supabase pg_cron)
+
+| Job name | Cron | Mode | Notes |
+|----------|------|------|--------|
+| `send-renewal-reminders-daily` | `0 14 * * *` | `cron` | Daily contract windows (90 / 30 / 7 / due today). **14:00 UTC** ≈ 7am PDT / 6am PST. |
+| `send-renewal-reminders-monthly-digest` | `5 14 * * *` | `monthly_cron` | Runs daily; edge function sends only on the **1st** (UTC). |
+| `send-renewal-reminders-annual-digest` | `10 14 * * *` | `annual_cron` | Runs daily; edge function sends only on **Jan 1** (UTC). |
+
+### Confirm schedule
+
+```sql
+select jobid, jobname, schedule, active
+from cron.job
+where jobname like 'send-renewal-reminders%'
+order by jobname;
+
+select enabled,
+       edge_function_url is not null as has_url,
+       length(cron_secret) as secret_len
+from private.renewal_cron_settings;
+```
+
+### Manual trigger (debug)
 
 ```bash
 curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
   -H "x-cron-secret: YOUR_CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"mode":"cron"}'
 ```
 
-**Monthly vendor report** (1st of each month — visual spend and scorecard report):
-
-```bash
-curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
-  -H "x-cron-secret: YOUR_CRON_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"mode":"monthly_cron"}'
-```
-
-Schedule `monthly_cron` once per day (e.g. 8am). Sends only on the 1st. Orgs with `monthly_digest_enabled = false` are skipped.
-
-**Annual vendor report** (January 1 — year-in-review report):
-
-```bash
-curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/send-renewal-reminders" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
-  -H "x-cron-secret: YOUR_CRON_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"mode":"annual_cron"}'
-```
-
-Schedule `annual_cron` once per day. Sends only on January 1. Orgs with `annual_digest_enabled = false` are skipped.
+Same for `monthly_cron` / `annual_cron`. Orgs with `monthly_digest_enabled = false` or `annual_digest_enabled = false` are skipped.
 
 ## 5. Test from the app
 

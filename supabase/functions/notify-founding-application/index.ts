@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { secretsEqual } from "../_shared/secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -176,7 +177,7 @@ Deno.serve(async (req) => {
   }
 
   const providedSecret = req.headers.get("x-founding-webhook-secret");
-  if (providedSecret !== webhookSecret) {
+  if (!secretsEqual(providedSecret, webhookSecret)) {
     return jsonResponse({ error: "Unauthorized." }, 401);
   }
 

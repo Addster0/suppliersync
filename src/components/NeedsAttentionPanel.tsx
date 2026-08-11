@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { RenewalLossCalculator } from "./RenewalLossCalculator";
 import { buildAttentionItems, workspaceSpendSummary } from "../lib/attention";
 import { topVendorsBySpend } from "../lib/spend";
 import { money } from "../lib/utils";
@@ -46,6 +47,7 @@ export function NeedsAttentionPanel({
           </p>
         </div>
         <div className="attention-stats">
+          <RenewalLossCalculator compact renewals={renewals} vendors={vendors} />
           <div className="attention-stat">
             <span className="attention-stat-label">YTD spend logged</span>
             <strong>{money(spendSummary.ytd)}</strong>

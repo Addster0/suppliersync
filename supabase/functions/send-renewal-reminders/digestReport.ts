@@ -1,4 +1,12 @@
+import {
+  calculateRenewalLossFromContracts,
+  type ContractSnapshot,
+  type RenewalLossSummary,
+} from "./renewalLossCalculator.ts";
+
 export type DigestPeriodType = "monthly" | "annual";
+
+export type { ContractSnapshot };
 
 export type SpendSnapshot = {
   entry_date: string;
@@ -46,6 +54,7 @@ export type DigestReportData = {
   vendorCount: number;
   evaluationCount: number;
   hasData: boolean;
+  renewalLoss: RenewalLossSummary;
 };
 
 function paymentTotal(entries: SpendSnapshot[]) {
@@ -269,9 +278,10 @@ export function buildDigestReportData(params: {
   vendors: VendorRow[];
   spendEntries: SpendSnapshot[];
   evaluations: EvaluationRow[];
+  contracts?: ContractSnapshot[];
   asOf?: Date;
 }): DigestReportData {
-  const { orgName, periodType, vendors, spendEntries, evaluations, asOf } = params;
+  const { orgName, periodType, vendors, spendEntries, evaluations, contracts = [], asOf } = params;
   const period = resolveReportPeriod(periodType, asOf);
 
   const currentEntries = filterSpendByRange(spendEntries, period.periodStart, period.periodEnd);
@@ -326,6 +336,7 @@ export function buildDigestReportData(params: {
     vendorCount: vendors.length,
     evaluationCount: evaluations.filter((row) => hasScorecardCriteria(row.criteria)).length,
     hasData,
+    renewalLoss: calculateRenewalLossFromContracts(contracts),
   };
 }
 
@@ -466,6 +477,18 @@ export function buildDigestReportHtml(params: {
     })
     .join("");
 
+  const renewalLossRows = data.renewalLoss.lineItems
+    .slice(0, 10)
+    .map(
+      (row) =>
+        `<tr>
+          <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;color:#172033;">${escapeHtml(row.contractName)}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;color:#64748b;">${escapeHtml(row.vendorName)}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#b91c1c;">${escapeHtml(formatCurrency(row.estimatedAnnualLoss))}/yr</td>
+        </tr>`,
+    )
+    .join("");
+
   const scheduleNote =
     data.periodType === "monthly"
       ? "Sent on the 1st of each month to workspace owners and admins when monthly reports are enabled."
@@ -501,6 +524,19 @@ export function buildDigestReportHtml(params: {
         </td>
       </tr>
     </table>
+    ${
+      data.renewalLoss.totalEstimatedAnnualLoss > 0
+        ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+            <tr>
+              <td style="padding:16px;background:#fff7ed;border-radius:12px;border:1px solid #fed7aa;">
+                <p style="margin:0 0 4px;font-size:12px;color:#9a3412;text-transform:uppercase;letter-spacing:0.05em;">Renewal savings at risk</p>
+                <p style="margin:0;font-size:22px;font-weight:700;color:#c2410c;">${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr</p>
+                <p style="margin:6px 0 0;font-size:13px;color:#9a3412;">${data.renewalLoss.atRiskContractCount} out-of-date contract${data.renewalLoss.atRiskContractCount === 1 ? "" : "s"} · ~${data.renewalLoss.savingsRatePercent}% typical renegotiation savings</p>
+              </td>
+            </tr>
+          </table>`
+        : ""
+    }
 
     <h2 style="margin:0 0 8px;font-size:16px;color:#172033;">Spend trend</h2>
     <p style="margin:0 0 12px;color:#64748b;font-size:14px;">${data.periodType === "monthly" ? "Last 6 months of payment spend" : `${data.periodLabel} monthly spend`}</p>
@@ -523,6 +559,22 @@ export function buildDigestReportHtml(params: {
             ${topVendorRows}
           </table>`
         : `<p style="color:#64748b;font-size:14px;">No vendor spend logged in this period.</p>`
+    }
+
+    <h2 style="margin:28px 0 8px;font-size:16px;color:#172033;">Contract renewal savings at risk</h2>
+    ${
+      data.renewalLoss.totalEstimatedAnnualLoss > 0
+        ? `<p style="margin:0 0 12px;color:#64748b;font-size:14px;">Estimated annual savings left on the table if out-of-date contracts are not renegotiated or restated.</p>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <th style="text-align:left;padding:8px 0;color:#64748b;font-size:12px;border-bottom:1px solid #e2e8f0;">Contract</th>
+              <th style="text-align:left;padding:8px 0;color:#64748b;font-size:12px;border-bottom:1px solid #e2e8f0;">Vendor</th>
+              <th style="text-align:right;padding:8px 0;color:#64748b;font-size:12px;border-bottom:1px solid #e2e8f0;">Est. yearly loss</th>
+            </tr>
+            ${renewalLossRows}
+          </table>
+          <p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">Illustrative estimate only — not financial or legal advice.</p>`
+        : `<p style="color:#64748b;font-size:14px;">No out-of-date contracts detected — renewals look current.</p>`
     }
 
     <h2 style="margin:28px 0 8px;font-size:16px;color:#172033;">Vendor scorecards</h2>

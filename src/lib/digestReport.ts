@@ -1,4 +1,5 @@
 import type { Evaluation, Vendor } from "../types";
+import { calculateRenewalLoss, type RenewalLossSummary } from "./renewalLossCalculator";
 import { openPrintableHtml } from "./utils";
 
 export type DigestPeriodType = "monthly" | "annual";
@@ -39,6 +40,7 @@ export type DigestReportData = {
   }[];
   vendorCount: number;
   evaluationCount: number;
+  renewalLoss: RenewalLossSummary;
 };
 
 function paymentTotal(entries: SpendSnapshot[]) {
@@ -309,6 +311,7 @@ export function buildDigestReportFromVendors(params: {
     evaluationCount: evaluations.filter((row) =>
       hasScorecard(row.criteria as Evaluation["criteria"])
     ).length,
+    renewalLoss: calculateRenewalLoss({ vendors }),
   };
 }
 
@@ -378,6 +381,14 @@ export function openDigestReportPreview(params: {
     .map((row) => `<tr><td>${escapeHtml(row.category)}</td><td>${escapeHtml(formatCurrency(row.amount))}</td></tr>`)
     .join("");
 
+  const renewalLossRows = data.renewalLoss.lineItems
+    .slice(0, 12)
+    .map(
+      (row) =>
+        `<tr><td>${escapeHtml(row.contractName)}</td><td>${escapeHtml(row.vendorName)}</td><td>${escapeHtml(formatCurrency(row.estimatedAnnualLoss))}/yr</td></tr>`,
+    )
+    .join("");
+
   const changeText =
     data.spendChangePct == null
       ? "No prior spend"
@@ -399,6 +410,7 @@ export function openDigestReportPreview(params: {
     .stats { display: flex; gap: 24px; flex-wrap: wrap; margin: 16px 0; }
     .stat strong { display: block; font-size: 22px; }
     .stat span { color: #64748b; font-size: 13px; }
+    .stat--warn strong { color: #c2410c; }
     .muted { color: #64748b; }
     @media print { body { margin: 18px; } }
   </style>
@@ -411,6 +423,11 @@ export function openDigestReportPreview(params: {
     <div class="stat"><strong>${escapeHtml(formatCurrency(data.currentSpend))}</strong><span>Period spend · ${changeText}</span></div>
     <div class="stat"><strong>${data.vendorCount}</strong><span>Vendors tracked</span></div>
     <div class="stat"><strong>${data.evaluationCount}</strong><span>Scorecard reviews</span></div>
+    ${
+      data.renewalLoss.totalEstimatedAnnualLoss > 0
+        ? `<div class="stat stat--warn"><strong>${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr</strong><span>Est. renewal savings at risk · ${data.renewalLoss.atRiskContractCount} contract${data.renewalLoss.atRiskContractCount === 1 ? "" : "s"}</span></div>`
+        : ""
+    }
   </div>
 
   <h2>Spend trend</h2>
@@ -421,6 +438,15 @@ export function openDigestReportPreview(params: {
 
   <h2>Top vendors</h2>
   ${topRows ? `<table><tr><th>Vendor</th><th>Category</th><th>Spend</th></tr>${topRows}</table>` : `<p class="muted">No vendor spend.</p>`}
+
+  <h2>Contract renewal savings at risk</h2>
+  ${
+    data.renewalLoss.totalEstimatedAnnualLoss > 0
+      ? `<p class="muted">Estimated annual savings left on the table if out-of-date contracts are not renegotiated (~${data.renewalLoss.savingsRatePercent}% typical savings).</p>
+         <table><tr><th>Contract</th><th>Vendor</th><th>Est. yearly loss</th></tr>${renewalLossRows}</table>
+         <p class="muted">Illustrative estimate only — not financial or legal advice.</p>`
+      : `<p class="muted">No out-of-date contracts detected — renewals look current.</p>`
+  }
 
   <h2>Vendor scorecards</h2>
   ${scoreRows ? `<table><tr><th>Vendor</th><th>Score</th><th>Change</th><th>Rank</th></tr>${scoreRows}</table>` : `<p class="muted">No scorecards yet.</p>`}

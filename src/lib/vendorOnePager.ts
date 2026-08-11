@@ -63,7 +63,16 @@ export function openVendorOnePager(vendor: Vendor, workspaceName: string) {
     <tr><th>Next renewal</th><td>${renewal ? `${escapeHtml(renewal.contract.name)} · ${escapeHtml(getContractDateLabel(renewal.contract.renewalType))}: ${escapeHtml(prettyDate(renewal.actionDate))} (${escapeHtml(formatDaysUntil(renewal.days, renewal.contract.renewalType))})` : "No contracts with renewal or review dates"}</td></tr>
     <tr><th>YTD spend logged</th><td>${escapeHtml(money(ytdSpend))}</td></tr>
     <tr><th>Net spend balance</th><td>${escapeHtml(money(netBalance))} <span class="muted">(${escapeHtml(money(totalPayments))} in payments)</span></td></tr>
-    <tr><th>Notes</th><td>${vendor.notes ? escapeHtml(vendor.notes) : "—"}</td></tr>
+    <tr><th>Notes</th><td>${
+      (vendor.stickyNotes ?? []).length
+        ? (vendor.stickyNotes ?? [])
+            .filter((note) => note.body.trim())
+            .map((note) => escapeHtml(note.body))
+            .join("<br><br>") || "—"
+        : vendor.notes
+          ? escapeHtml(vendor.notes)
+          : "—"
+    }</td></tr>
   </table>
 
   <h2>Contacts (${vendor.contacts.length})</h2>

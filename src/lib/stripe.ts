@@ -52,7 +52,12 @@ export function isCharterOrganization(org: Organization | null | undefined) {
   return org.plan === "charter" || org.lockedMonthlyPriceCents === CHARTER_PRICE_CENTS;
 }
 
+export function allowsStaticCheckoutFallback() {
+  return !import.meta.env.PROD;
+}
+
 export function getCheckoutPaymentLink(org: Organization | null | undefined): string | null {
+  if (!allowsStaticCheckoutFallback()) return null;
   if (isCharterOrganization(org)) {
     if (charterLink?.trim()) return charterLink.trim();
     return null;

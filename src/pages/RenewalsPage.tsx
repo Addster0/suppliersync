@@ -4,6 +4,7 @@ import { fetchRenewalEmailStatus, sendDigestTest, sendRenewalReminderTest, setAn
 import type { RenewalEmailStatus } from "../api/renewalReminders";
 import { fetchUpcomingRenewals, fetchHandledRenewals, fetchVendors, setRenewalHandled } from "../api/vendors";
 import { NeedsAttentionPanel } from "../components/NeedsAttentionPanel";
+import { RenewalLossCalculator } from "../components/RenewalLossCalculator";
 import { ItemFilterChips } from "../components/ItemFilterChips";
 import { RenewalRow, RenewalsEmptyState } from "../components/RenewalRow";
 import { useAuth } from "../contexts/AuthContext";
@@ -12,6 +13,7 @@ import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { openClinicReport } from "../lib/clinicReport";
 import { openDigestReportPreview } from "../lib/digestReport";
 import { RENEWAL_LOOKAHEAD_DAYS, RENEWAL_RECENT_EXPIRED_DAYS, urgencyLabel } from "../lib/renewals";
+import { getMedianContractValue } from "../lib/renewalLossCalculator";
 import { requireSupabase } from "../lib/supabase";
 import type { RenewalItem, RenewalUrgency, Vendor } from "../types";
 
@@ -21,9 +23,11 @@ type RenewalListFilter = "open" | "handled";
 export function RenewalsSummary({
   organizationId,
   compact = false,
+  medianContractValue = 0,
 }: {
   organizationId: string;
   compact?: boolean;
+  medianContractValue?: number;
 }) {
   const [items, setItems] = useState<RenewalItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +95,7 @@ export function RenewalsSummary({
       </div>
       <div className="renewals-list">
         {preview.map((item) => (
-          <RenewalRow key={item.contractId} item={item} />
+          <RenewalRow key={item.contractId} item={item} medianContractValue={medianContractValue} />
         ))}
       </div>
       {compact && items.length > 3 && (
@@ -272,6 +276,8 @@ export function RenewalsPage() {
     return map;
   }, [items]);
 
+  const medianContractValue = useMemo(() => getMedianContractValue(vendors), [vendors]);
+
   async function handleToggleReminders(nextValue: boolean) {
     if (!organizationId || !canManageReminders) return;
 
@@ -400,6 +406,11 @@ export function RenewalsPage() {
               </p>
             </div>
             <div className="right-actions">
+              <RenewalLossCalculator
+                disabled={loading || loadingVendors}
+                renewals={items}
+                vendors={vendors}
+              />
               <button
                 className="secondary"
                 disabled={loading || loadingVendors}
@@ -668,6 +679,7 @@ export function RenewalsPage() {
                       <RenewalRow
                         key={item.contractId}
                         item={item}
+                        medianContractValue={medianContractValue}
                         canMarkHandled={canMarkHandled}
                         onMarkHandled={handleMarkRenewalHandled}
                       />
@@ -686,6 +698,7 @@ export function RenewalsPage() {
                     key={item.contractId}
                     handled
                     item={item}
+                    medianContractValue={medianContractValue}
                     canMarkHandled={canMarkHandled}
                     onReopen={handleReopenRenewal}
                   />

@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { checkAndLogExtractUsage } from "../_shared/apiUsageLimit.ts";
+import { requireAuthenticatedUser } from "../_shared/requireAuthenticated.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -388,6 +389,9 @@ Deno.serve(async (req) => {
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
 
   if (mode === "status") {
+    const auth = await requireAuthenticatedUser(req, corsHeaders, jsonResponse);
+    if ("error" in auth && auth.error) return auth.error;
+
     return jsonResponse({
       configured: Boolean(openaiKey),
       error: openaiKey
@@ -429,7 +433,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "File content is not a valid PDF." }, 400);
   }
 
-  const rateLimit = await checkAndLogExtractUsage(access.userClient!, organizationId, "extract-document");
+  const rateLimit = await checkAndLogExtractUsage(access.user.id, organizationId, "extract-document");
   if (!rateLimit.allowed) {
     return jsonResponse({ error: rateLimit.message }, rateLimit.status);
   }

@@ -107,7 +107,7 @@ export function DocumentViewerModal({
               title={fileName}
               src={url}
               className="doc-viewer-frame"
-              sandbox="allow-same-origin allow-scripts allow-downloads"
+              sandbox="allow-same-origin allow-downloads"
             />
           )}
           {!loading && !error && url && previewKind === "image" && (

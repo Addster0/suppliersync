@@ -35,12 +35,14 @@ supabase secrets set \
   "CRON_SECRET=${CRON_SECRET}"
 
 echo ""
-echo "Deploying send-renewal-reminders..."
-supabase functions deploy send-renewal-reminders
+# pg_net cron invokes this without a JWT; auth is via x-cron-secret header.
+echo "Deploying send-renewal-reminders (no JWT — pg_cron/pg_net; auth via x-cron-secret)..."
+supabase functions deploy send-renewal-reminders --no-verify-jwt
 
 echo ""
 echo "Done. Next:"
-echo "  1. Run migration 006 + 007 in Supabase SQL Editor if not done yet"
-echo "  2. Open Renewals in the app and send a test email"
-echo "  3. If using onboarding@resend.dev, Resend only delivers to your Resend signup email"
-echo "  4. Verify a domain in Resend to deliver to any clinic Gmail"
+echo "  1. Run migration 006 + 007 (+ 036 for auto-cron) in Supabase SQL Editor if not done yet"
+echo "  2. Enable auto-scheduling: ./scripts/setup-renewal-cron.sh"
+echo "  3. Open Renewals in the app and send a test email"
+echo "  4. If using onboarding@resend.dev, Resend only delivers to your Resend signup email"
+echo "  5. Verify a domain in Resend to deliver to any clinic Gmail"

@@ -35,6 +35,7 @@ import {
   setRenewalHandled,
 } from "./api/vendors";
 import { BrandLogo } from "./components/BrandLogo";
+import { ContractRenewalLossBadge } from "./components/ContractRenewalLossBadge";
 import { DocumentViewerModal } from "./components/DocumentViewerModal";
 import { EvaluationsSection } from "./components/EvaluationsSection";
 import { FileAttachmentLink } from "./components/FileAttachmentLink";
@@ -42,6 +43,7 @@ import { GlobalSearch } from "./components/GlobalSearch";
 import { ItemFilterChips, LifecycleBadge } from "./components/ItemFilterChips";
 import { VendorImportPanel } from "./components/VendorImportPanel";
 import { VendorAddressField } from "./components/VendorAddressField";
+import { VendorContactEmailPanel } from "./components/VendorContactEmailPanel";
 import { VendorNotesEditor } from "./components/VendorNotesEditor";
 import { VendorTemplatePicker } from "./components/VendorTemplatePicker";
 import { RenewalsSummary } from "./pages/RenewalsPage";
@@ -103,13 +105,16 @@ import {
   RENEWAL_LOOKAHEAD_DAYS,
   RENEWAL_RECENT_EXPIRED_DAYS,
   RENEWAL_TYPE_OPTIONS,
+  addMonthsToIsoDate,
   computeSuggestedReviewDate,
   daysUntilEnd,
   getContractActionDate,
   renewalTypeLabel,
   validateContractDates,
 } from "./lib/renewals";
+import { enrichContractExtractResult, missingRequiredContractFields } from "./lib/contractExtractEnrich";
 import { getSupabaseEdgeSecretsUrl, getSupabaseSqlEditorUrl } from "./lib/storage";
+import { getMedianContractValue } from "./lib/renewalLossCalculator";
 import type {
   Contract,
   ContractRenewalType,
@@ -158,7 +163,7 @@ function emptyContractDraft(): ContractFormDraft {
   };
 }
 
-function buildContractExtractNotice(result: ContractExtractResult): string {
+function buildContractExtractNotice(result: ContractExtractResult, draftAfter: ContractFormDraft): string {
   const filled: string[] = [];
   if (result.name) filled.push("name");
   if (result.startDate) filled.push("start date");
@@ -172,6 +177,13 @@ function buildContractExtractNotice(result: ContractExtractResult): string {
   if (result.value != null) filled.push("value");
 
   const typeLabel = result.documentTypeLabel ?? extractDocumentTypeLabel(result.documentType);
+  const stillMissing = missingRequiredContractFields({
+    name: draftAfter.name,
+    startDate: draftAfter.startDate,
+    endDate: draftAfter.endDate,
+    renewalDate: draftAfter.renewalDate,
+    renewalType: draftAfter.renewalType,
+  });
 
   if (!typeLabel && filled.length === 0) {
     return "Could not find document details in this PDF. Enter details manually.";
@@ -180,49 +192,62 @@ function buildContractExtractNotice(result: ContractExtractResult): string {
   const detailText =
     filled.length > 0 ? `Pre-filled ${filled.join(", ")}.` : "Review the detected document type.";
 
+  const missingText =
+    stillMissing.length > 0
+      ? ` Still need: ${stillMissing.join(", ")} — fill in below or re-scan.`
+      : " Review below, then click Add Contract.";
+
+  const hintText =
+    result.extractHints && result.extractHints.length > 0
+      ? ` ${result.extractHints.join(" ")}`
+      : "";
+
   if (typeLabel) {
-    return `Detected ${typeLabel}. ${detailText} Review below, then click Add Contract.`;
+    return `Detected ${typeLabel}. ${detailText}${missingText}${hintText}`;
   }
-  return `${detailText} Review below, then click Add Contract.`;
+  return `${detailText}${missingText}${hintText}`;
 }
 
 function applyContractExtractToDraft(
   draft: ContractFormDraft,
   result: ContractExtractResult
 ): Partial<ContractFormDraft> {
+  const enriched = enrichContractExtractResult(result);
   const patch: Partial<ContractFormDraft> = {};
-  if (result.name) patch.name = result.name;
-  if (result.startDate) patch.startDate = result.startDate;
-  if (result.endDate) patch.endDate = result.endDate;
-  if (result.value != null && Number.isFinite(result.value)) patch.value = String(result.value);
+  if (enriched.name) patch.name = enriched.name;
+  if (enriched.startDate) patch.startDate = enriched.startDate;
+  if (enriched.endDate) patch.endDate = enriched.endDate;
+  if (enriched.value != null && Number.isFinite(enriched.value)) patch.value = String(enriched.value);
 
-  if (result.renewalType) {
-    patch.renewalType = result.renewalType;
-  } else if (result.autoRenew === true) {
+  if (enriched.renewalType) {
+    patch.renewalType = enriched.renewalType;
+  } else if (enriched.autoRenew === true) {
     patch.renewalType = "auto_renew";
-  } else if (result.autoRenew === false && !result.endDate) {
+  } else if (enriched.autoRenew === false && !enriched.endDate) {
     patch.renewalType = "evergreen";
   }
 
-  if (result.noticePeriodDays != null && result.noticePeriodDays >= 0) {
-    patch.noticePeriodDays = String(result.noticePeriodDays);
+  if (enriched.noticePeriodDays != null && enriched.noticePeriodDays >= 0) {
+    patch.noticePeriodDays = String(enriched.noticePeriodDays);
   }
-  if (result.termMonths != null && result.termMonths > 0) {
-    patch.termMonths = String(result.termMonths);
+  if (enriched.termMonths != null && enriched.termMonths > 0) {
+    patch.termMonths = String(enriched.termMonths);
   }
 
-  const startDate = result.startDate ?? draft.startDate;
-  const termMonths = result.termMonths ?? (patch.termMonths ? Number(patch.termMonths) : null);
+  const mergedType = patch.renewalType ?? draft.renewalType;
+  const startDate = enriched.startDate ?? draft.startDate;
+  const termMonths =
+    enriched.termMonths ?? (patch.termMonths ? Number(patch.termMonths) : draft.termMonths ? Number(draft.termMonths) : null);
   const noticeDays =
-    result.noticePeriodDays ??
-    (patch.noticePeriodDays ? Number(patch.noticePeriodDays) : null);
+    enriched.noticePeriodDays ??
+    (patch.noticePeriodDays ? Number(patch.noticePeriodDays) : draft.noticePeriodDays ? Number(draft.noticePeriodDays) : null);
 
-  if (result.renewalDate) {
-    patch.renewalDate = result.renewalDate;
+  if (enriched.renewalDate) {
+    patch.renewalDate = enriched.renewalDate;
   } else if (
     startDate &&
     termMonths &&
-    (patch.renewalType === "auto_renew" || result.autoRenew === true)
+    (mergedType === "auto_renew" || enriched.autoRenew === true)
   ) {
     patch.renewalDate = computeSuggestedReviewDate({
       startDate,
@@ -231,7 +256,13 @@ function applyContractExtractToDraft(
     });
   }
 
-  if (result.autoRenew === true || patch.renewalType === "auto_renew") {
+  if (mergedType === "fixed_term" && !patch.endDate && !draft.endDate && startDate && termMonths) {
+    patch.endDate = addMonthsToIsoDate(startDate, termMonths);
+  }
+
+  if (enriched.autoRenew === true || patch.renewalType === "auto_renew") {
+    patch.status = "active";
+  } else if (patch.startDate && (patch.endDate || patch.renewalDate)) {
     patch.status = "active";
   }
 
@@ -410,11 +441,14 @@ export function VendorWorkspace() {
     });
   }, []);
 
-  const reloadVendors = useCallback(async () => {
+  const reloadVendors = useCallback(async (options?: { silent?: boolean }) => {
     if (!organizationId) return;
     const fetchGen = ++vendorsFetchGenRef.current;
-    setLoadingVendors(true);
-    setLoadError("");
+    const silent = Boolean(options?.silent);
+    if (!silent) {
+      setLoadingVendors(true);
+      setLoadError("");
+    }
     try {
       const data = await fetchVendors(organizationId);
       if (fetchGen !== vendorsFetchGenRef.current) return;
@@ -424,12 +458,14 @@ export function VendorWorkspace() {
         if (resolved) saveSelectedVendorId(organizationId, resolved);
         return resolved;
       });
-      await refreshSetup();
+      if (!silent) {
+        await refreshSetup();
+      }
     } catch (error) {
       if (fetchGen !== vendorsFetchGenRef.current) return;
       setLoadError(error instanceof Error ? error.message : "Could not load vendors.");
     } finally {
-      if (fetchGen === vendorsFetchGenRef.current) {
+      if (!silent && fetchGen === vendorsFetchGenRef.current) {
         setLoadingVendors(false);
       }
     }
@@ -534,6 +570,8 @@ export function VendorWorkspace() {
     const filtered = filterAndRankVendors(vendors, vendorSearchQuery);
     return sortVendors(filtered, vendorSort);
   }, [vendors, vendorSearchQuery, vendorSort]);
+
+  const medianContractValue = useMemo(() => getMedianContractValue(vendors), [vendors]);
 
   useEffect(() => {
     if (!selectedVendorId) return;
@@ -813,7 +851,11 @@ export function VendorWorkspace() {
             />
           </div>
         )}
-        <RenewalsSummary organizationId={organizationId} compact />
+        <RenewalsSummary
+          compact
+          medianContractValue={medianContractValue}
+          organizationId={organizationId}
+        />
         {loadError && (
           <div className="banner error" role="alert">
             {loadError}
@@ -922,9 +964,16 @@ export function VendorWorkspace() {
               </div>
               <div className="card wide">
                 <VendorNotesEditor
-                  notes={selectedVendor.notes}
-                  notesLocked={selectedVendor.notesLocked ?? false}
-                  onSaved={reloadVendors}
+                  notes={selectedVendor.stickyNotes ?? []}
+                  onNotesChange={(stickyNotes) => {
+                    const vendorId = selectedVendor.id;
+                    setVendors((current) =>
+                      current.map((vendor) =>
+                        vendor.id === vendorId ? { ...vendor, stickyNotes } : vendor
+                      )
+                    );
+                  }}
+                  organizationId={organizationId}
                   readOnly={readOnly}
                   vendorId={selectedVendor.id}
                 />
@@ -949,6 +998,7 @@ export function VendorWorkspace() {
                 vendor={selectedVendor}
                 organizationId={organizationId}
                 readOnly={readOnly}
+                isPlatformAdmin={isPlatformAdmin}
                 onChanged={reloadVendors}
               />
             )}
@@ -958,6 +1008,7 @@ export function VendorWorkspace() {
                 organizationId={organizationId}
                 readOnly={readOnly}
                 isPlatformAdmin={isPlatformAdmin}
+                medianContractValue={medianContractValue}
                 draft={getContractDraft(selectedVendor.id)}
                 updateContractDraft={updateContractDraft}
                 onClearDraft={() => clearContractDraft(selectedVendor.id)}
@@ -1009,11 +1060,13 @@ function ContactsSection({
   vendor,
   organizationId,
   readOnly,
+  isPlatformAdmin,
   onChanged,
 }: {
   vendor: Vendor;
   organizationId: string;
   readOnly: boolean;
+  isPlatformAdmin: boolean;
   onChanged: () => Promise<void>;
 }) {
   async function handleAddContact(event: FormEvent<HTMLFormElement>) {
@@ -1033,36 +1086,46 @@ function ContactsSection({
   }
 
   return (
-    <Section title="Contacts" empty={!vendor.contacts.length} emptyText="No contacts added yet.">
-      {!readOnly && (
-        <FormGrid onSubmit={handleAddContact} submitText="Add Contact">
-          <input name="name" placeholder="Name" />
-          <input name="role" placeholder="Role" />
-          <input name="email" placeholder="Email" type="email" />
-          <input name="phone" placeholder="Phone" />
-        </FormGrid>
-      )}
+    <>
+      <Section title="Contacts" empty={!vendor.contacts.length} emptyText="No contacts added yet.">
+        {!readOnly && (
+          <FormGrid onSubmit={handleAddContact} submitText="Add Contact">
+            <input name="name" placeholder="Name" />
+            <input name="role" placeholder="Role" />
+            <input name="email" placeholder="Email" type="email" />
+            <input name="phone" placeholder="Phone" />
+          </FormGrid>
+        )}
 
-      {vendor.contacts.map((contact) => (
-        <div className="card row" key={contact.id}>
-          <div>
-            <strong>{contact.name}</strong>
-            <p className="muted">{contact.role}</p>
-            <p className="muted">
-              {contact.email} · {contact.phone}
-            </p>
+        {vendor.contacts.map((contact) => (
+          <div className="card row" key={contact.id}>
+            <div>
+              <strong>{contact.name}</strong>
+              <p className="muted">{contact.role}</p>
+              <p className="muted">
+                {contact.email} · {contact.phone}
+              </p>
+            </div>
+            {!readOnly && (
+              <DeleteButton
+                onClick={async () => {
+                  await deleteContact(contact.id);
+                  await onChanged();
+                }}
+              />
+            )}
           </div>
-          {!readOnly && (
-            <DeleteButton
-              onClick={async () => {
-                await deleteContact(contact.id);
-                await onChanged();
-              }}
-            />
-          )}
-        </div>
-      ))}
-    </Section>
+        ))}
+      </Section>
+
+      <VendorContactEmailPanel
+        organizationId={organizationId}
+        vendorId={vendor.id}
+        contacts={vendor.contacts}
+        readOnly={readOnly}
+        isPlatformAdmin={isPlatformAdmin}
+      />
+    </>
   );
 }
 
@@ -1245,6 +1308,7 @@ function ContractsSection({
   organizationId,
   readOnly,
   isPlatformAdmin,
+  medianContractValue,
   draft,
   updateContractDraft,
   onClearDraft,
@@ -1257,6 +1321,7 @@ function ContractsSection({
   organizationId: string;
   readOnly: boolean;
   isPlatformAdmin: boolean;
+  medianContractValue: number;
   draft: ContractFormDraft;
   updateContractDraft: (vendorId: string, patch: Partial<ContractFormDraft>) => void;
   onClearDraft: () => void;
@@ -1269,6 +1334,8 @@ function ContractsSection({
     (patch: Partial<ContractFormDraft>) => updateContractDraft(vendor.id, patch),
     [updateContractDraft, vendor.id]
   );
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [formError, setFormError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1403,11 +1470,14 @@ function ContractsSection({
         return;
       }
 
-      const extractPatch = applyContractExtractToDraft(draft, result);
+      const currentDraft = draftRef.current;
+      const enriched = enrichContractExtractResult(result);
+      const extractPatch = applyContractExtractToDraft(currentDraft, enriched);
+      const draftAfter = { ...currentDraft, ...extractPatch };
       patchDraft({
         ...extractPatch,
         extracting: false,
-        extractNotice: buildContractExtractNotice(result),
+        extractNotice: buildContractExtractNotice(enriched, draftAfter),
       });
     } catch (error) {
       if (requestId !== extractRequestIdRef.current[vendor.id]) return;
@@ -1813,6 +1883,11 @@ function ContractsSection({
             )}
           </div>
           <div className="right-actions">
+            <ContractRenewalLossBadge
+              contract={contract}
+              medianContractValue={medianContractValue}
+              vendor={vendor}
+            />
             <span className={getStatusClass(contract.status)}>{contract.status}</span>
             {!readOnly && !contract.renewalHandledAt && contractInRenewalWindow(contract) && (
               <button

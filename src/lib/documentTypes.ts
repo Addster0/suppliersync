@@ -78,6 +78,33 @@ export function filenameSuggestsSpend(fileName: string): boolean {
   return SPEND_FILENAME_PATTERN.test(fileName);
 }
 
+const MONTH_NAME_TO_NUMBER: Record<string, number> = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  sept: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+};
+
 /** Parse common date strings into YYYY-MM-DD for spend/contract fields. */
 export function parseFlexibleDate(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -94,6 +121,22 @@ export function parseFlexibleDate(value: unknown): string | null {
     const day = usMatch[2].padStart(2, "0");
     const year = usMatch[3].length === 2 ? `20${usMatch[3]}` : usMatch[3];
     return `${year}-${month}-${day}`;
+  }
+
+  const monthDayYear = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (monthDayYear) {
+    const month = MONTH_NAME_TO_NUMBER[monthDayYear[1].toLowerCase()];
+    if (month) {
+      return `${monthDayYear[3]}-${String(month).padStart(2, "0")}-${monthDayYear[2].padStart(2, "0")}`;
+    }
+  }
+
+  const dayMonthYear = trimmed.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  if (dayMonthYear) {
+    const month = MONTH_NAME_TO_NUMBER[dayMonthYear[2].toLowerCase()];
+    if (month) {
+      return `${dayMonthYear[3]}-${String(month).padStart(2, "0")}-${dayMonthYear[1].padStart(2, "0")}`;
+    }
   }
 
   const parsed = Date.parse(trimmed);
