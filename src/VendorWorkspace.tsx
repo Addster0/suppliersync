@@ -44,6 +44,7 @@ import { GlobalSearch } from "./components/GlobalSearch";
 import { ItemFilterChips, LifecycleBadge } from "./components/ItemFilterChips";
 import { VendorImportPanel } from "./components/VendorImportPanel";
 import { VendorAddressField } from "./components/VendorAddressField";
+import { VendorIdentityFields } from "./components/VendorIdentityFields";
 import { VendorContactEmailPanel } from "./components/VendorContactEmailPanel";
 import { VendorNotesEditor } from "./components/VendorNotesEditor";
 import { VendorTemplatePicker } from "./components/VendorTemplatePicker";
@@ -941,9 +942,14 @@ export function VendorWorkspace() {
             </header>
 
             <section className="info-grid">
-              <div className="card">
-                <p className="label">Category</p>
-                <strong>{selectedVendor.category}</strong>
+              <div className="card wide">
+                <VendorIdentityFields
+                  category={selectedVendor.category}
+                  name={selectedVendor.name}
+                  onSaved={reloadVendors}
+                  readOnly={readOnly}
+                  vendorId={selectedVendor.id}
+                />
               </div>
               <div className="card">
                 <p className="label">Status</p>
