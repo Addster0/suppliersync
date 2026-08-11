@@ -73,19 +73,45 @@ function subtractDaysFromIsoDate(isoDate: string, days: number) {
   return formatDateForQuery(date);
 }
 
+function normalizeIsoDate(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
 function getContractActionDate(contract: Pick<
   ContractSnapshot,
   "renewalType" | "endDate" | "renewalDate" | "noticePeriodDays"
 >) {
-  if (contract.renewalDate) return contract.renewalDate;
-  if (contract.renewalType === "auto_renew" && contract.endDate && contract.noticePeriodDays) {
-    return subtractDaysFromIsoDate(contract.endDate, contract.noticePeriodDays);
+  const renewalDate = normalizeIsoDate(contract.renewalDate);
+  const endDate = normalizeIsoDate(contract.endDate);
+
+  if (contract.renewalType === "fixed_term") {
+    return endDate ?? renewalDate;
   }
-  return contract.endDate;
+  if (renewalDate) return renewalDate;
+  if (contract.renewalType === "auto_renew" && endDate && contract.noticePeriodDays) {
+    return subtractDaysFromIsoDate(endDate, contract.noticePeriodDays);
+  }
+  return endDate;
+}
+
+function getContractUrgencyDate(contract: Pick<
+  ContractSnapshot,
+  "renewalType" | "endDate" | "renewalDate" | "noticePeriodDays" | "status"
+>) {
+  const actionDate = getContractActionDate(contract);
+  const endDate = normalizeIsoDate(contract.endDate);
+  if (actionDate && endDate) return actionDate <= endDate ? actionDate : endDate;
+  return actionDate ?? endDate;
 }
 
 function daysUntilEnd(endDate: string) {
-  const end = new Date(`${endDate}T00:00:00`);
+  const normalized = normalizeIsoDate(endDate) ?? endDate.slice(0, 10);
+  const end = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return Number.NaN;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -133,35 +159,43 @@ function classifyContract(params: {
   const { contract, medianValue, baseRate } = params;
 
   if (contract.renewalHandledAt) return null;
-  if (contract.vendorStatus !== "active") return null;
-  if (contract.status === "inactive" || contract.status === "pending") return null;
+  if (contract.vendorStatus === "inactive") return null;
+  if (contract.status === "inactive") return null;
 
   let reason: RenewalLossReason | null = null;
-  const actionDate = getContractActionDate(contract);
+  const actionDate = getContractUrgencyDate(contract);
+  const overdue =
+    contract.status === "expired" ||
+    (actionDate != null && Number.isFinite(daysUntilEnd(actionDate)) && daysUntilEnd(actionDate) < 0);
 
   if (contract.status === "expired") {
     reason = "expired";
+  } else if (overdue) {
+    reason =
+      contract.renewalType === "auto_renew" && contract.noticePeriodDays
+        ? "auto_renew_missed"
+        : actionDate && daysUntilEnd(actionDate) < 0 && contract.renewalType === "fixed_term"
+          ? "expired"
+          : "overdue";
   } else if (!actionDate) {
     if (contract.status === "active") reason = "untracked";
   } else {
     const days = daysUntilEnd(actionDate);
-    const urgency = getRenewalUrgency(days);
-    if (urgency === "overdue") {
-      reason =
-        contract.renewalType === "auto_renew" && contract.noticePeriodDays
-          ? "auto_renew_missed"
-          : "overdue";
-    } else if (urgency === "soon") {
-      reason = "due_soon";
+    if (Number.isFinite(days)) {
+      const urgency = getRenewalUrgency(days);
+      if (urgency === "soon") {
+        reason = "due_soon";
+      }
     }
   }
 
   if (!reason) return null;
 
-  const valueIsEstimated = contract.value <= 0;
-  const annualValue = valueIsEstimated ? medianValue : contract.value;
-  if (annualValue <= 0) return null;
-
+  const direct = typeof contract.value === "number" && Number.isFinite(contract.value) ? contract.value : Number(contract.value);
+  const valueIsEstimated = !(Number.isFinite(direct) && direct > 0);
+  const annualValue = valueIsEstimated ? medianValue : direct;
+  // Keep out-of-date contracts even when value is unknown so digests don't claim "none detected".
+  const safeAnnual = Number.isFinite(annualValue) && annualValue > 0 ? annualValue : 0;
   const savingsRate = savingsRateForContract(reason, contract.renewalType, baseRate);
 
   return {
@@ -169,9 +203,9 @@ function classifyContract(params: {
     contractName: contract.name,
     vendorId: contract.vendorId,
     vendorName: contract.vendorName,
-    annualValue,
+    annualValue: safeAnnual,
     valueIsEstimated,
-    estimatedAnnualLoss: Math.round(annualValue * savingsRate),
+    estimatedAnnualLoss: Math.round(safeAnnual * savingsRate),
     savingsRate,
     reason,
     renewalType: contract.renewalType,

@@ -1,4 +1,5 @@
-import { daysUntilEnd, getContractActionDate, getRenewalUrgency } from "./renewals";
+import { daysUntilEnd, getContractUrgencyDate, getRenewalUrgency, isContractOverdue } from "./renewals";
+import { vendorYtdSpend } from "./spend";
 import type { Contract, ContractRenewalType, RenewalItem, Vendor } from "../types";
 
 /** Typical savings when renegotiating vendor contracts before renewal (healthcare benchmarks ~10–15%). */
@@ -51,6 +52,12 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
+/** Coerce DB/JSON values; treat non-finite / negative as 0. */
+export function safeContractValue(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function savingsRateForContract(reason: RenewalLossReason, renewalType: ContractRenewalType, baseRate: number) {
   if (renewalType === "auto_renew" && (reason === "overdue" || reason === "auto_renew_missed")) {
     return baseRate + AUTO_RENEW_MISSED_BONUS_RATE;
@@ -81,9 +88,58 @@ function reasonDetail(reason: RenewalLossReason, renewalType: ContractRenewalTyp
 
 export function getMedianContractValue(vendors: Vendor[]): number {
   const valuedContracts = vendors.flatMap((vendor) =>
-    vendor.contracts.filter((contract) => contract.value > 0).map((contract) => contract.value),
+    vendor.contracts.map((contract) => safeContractValue(contract.value)).filter((value) => value > 0),
   );
   return median(valuedContracts);
+}
+
+function resolveAnnualValue(params: {
+  contractValue: unknown;
+  medianValue: number;
+  vendorSpendFallback?: number;
+}): { annualValue: number; valueIsEstimated: boolean } {
+  const direct = safeContractValue(params.contractValue);
+  if (direct > 0) return { annualValue: direct, valueIsEstimated: false };
+  if (params.medianValue > 0) return { annualValue: params.medianValue, valueIsEstimated: true };
+  const spend = safeContractValue(params.vendorSpendFallback);
+  if (spend > 0) return { annualValue: spend, valueIsEstimated: true };
+  return { annualValue: 0, valueIsEstimated: true };
+}
+
+function classifyAtRiskReason(contract: Contract): {
+  reason: RenewalLossReason;
+  actionDate: string | null;
+} | null {
+  if (contract.renewalHandledAt) return null;
+  if (contract.status === "inactive") return null;
+
+  const actionDate = getContractUrgencyDate(contract);
+
+  if (contract.status === "expired") {
+    return { reason: "expired", actionDate };
+  }
+
+  // Past term end / review date — always at risk (matches Contracts "Expired" badge).
+  if (isContractOverdue(contract)) {
+    const reason: RenewalLossReason =
+      contract.renewalType === "auto_renew" && contract.noticePeriodDays
+        ? "auto_renew_missed"
+        : actionDate && daysUntilEnd(actionDate) < 0 && contract.renewalType === "fixed_term"
+          ? "expired"
+          : "overdue";
+    return { reason, actionDate };
+  }
+
+  if (!actionDate) {
+    if (contract.status === "active") return { reason: "untracked", actionDate: null };
+    return null;
+  }
+
+  const days = daysUntilEnd(actionDate);
+  if (!Number.isFinite(days)) return null;
+  const urgency = getRenewalUrgency(days);
+  if (urgency === "soon") return { reason: "due_soon", actionDate };
+  return null;
 }
 
 export function calculateContractRenewalLoss(params: {
@@ -92,6 +148,7 @@ export function calculateContractRenewalLoss(params: {
   vendorName: string;
   medianValue: number;
   savingsRate?: number;
+  vendorSpendFallback?: number;
 }): RenewalLossLineItem | null {
   return classifyContract({
     contract: params.contract,
@@ -99,6 +156,7 @@ export function calculateContractRenewalLoss(params: {
     vendorName: params.vendorName,
     medianValue: params.medianValue,
     baseRate: params.savingsRate ?? DEFAULT_RENEGOTIATION_SAVINGS_RATE,
+    vendorSpendFallback: params.vendorSpendFallback ?? 0,
   });
 }
 
@@ -111,23 +169,26 @@ export function calculateRenewalItemLoss(params: {
   const baseRate = params.savingsRate ?? DEFAULT_RENEGOTIATION_SAVINGS_RATE;
 
   if (item.renewalHandledAt) return null;
-  if (item.status === "inactive" || item.status === "pending") return null;
+  if (item.status === "inactive") return null;
 
   let reason: RenewalLossReason | null = null;
-  if (item.status === "expired") {
-    reason = "expired";
-  } else if (item.urgency === "overdue") {
-    reason = item.renewalType === "auto_renew" ? "auto_renew_missed" : "overdue";
+  if (item.status === "expired" || item.urgency === "overdue") {
+    reason =
+      item.status === "expired"
+        ? "expired"
+        : item.renewalType === "auto_renew"
+          ? "auto_renew_missed"
+          : "overdue";
   } else if (item.urgency === "soon") {
     reason = "due_soon";
   }
 
   if (!reason) return null;
 
-  const valueIsEstimated = item.value <= 0;
-  const annualValue = valueIsEstimated ? medianValue : item.value;
-  if (annualValue <= 0) return null;
-
+  const { annualValue, valueIsEstimated } = resolveAnnualValue({
+    contractValue: item.value,
+    medianValue,
+  });
   const savingsRate = savingsRateForContract(reason, item.renewalType, baseRate);
 
   return {
@@ -151,38 +212,19 @@ function classifyContract(params: {
   vendorName: string;
   medianValue: number;
   baseRate: number;
+  vendorSpendFallback?: number;
 }): RenewalLossLineItem | null {
   const { contract, vendorId, vendorName, medianValue, baseRate } = params;
 
-  if (contract.renewalHandledAt) return null;
-  if (contract.status === "inactive" || contract.status === "pending") return null;
+  const classified = classifyAtRiskReason(contract);
+  if (!classified) return null;
 
-  let reason: RenewalLossReason | null = null;
-  const actionDate = getContractActionDate(contract);
-
-  if (contract.status === "expired") {
-    reason = "expired";
-  } else if (!actionDate) {
-    if (contract.status === "active") reason = "untracked";
-  } else {
-    const days = daysUntilEnd(actionDate);
-    const urgency = getRenewalUrgency(days);
-    if (urgency === "overdue") {
-      reason =
-        contract.renewalType === "auto_renew" && contract.noticePeriodDays
-          ? "auto_renew_missed"
-          : "overdue";
-    } else if (urgency === "soon") {
-      reason = "due_soon";
-    }
-  }
-
-  if (!reason) return null;
-
-  const valueIsEstimated = contract.value <= 0;
-  const annualValue = valueIsEstimated ? medianValue : contract.value;
-  if (annualValue <= 0) return null;
-
+  const { reason, actionDate } = classified;
+  const { annualValue, valueIsEstimated } = resolveAnnualValue({
+    contractValue: contract.value,
+    medianValue,
+    vendorSpendFallback: params.vendorSpendFallback,
+  });
   const savingsRate = savingsRateForContract(reason, contract.renewalType, baseRate);
 
   return {
@@ -203,35 +245,14 @@ function classifyContract(params: {
 function mergeRenewalItems(
   lineItems: Map<string, RenewalLossLineItem>,
   renewals: RenewalItem[],
+  medianValue: number,
   baseRate: number,
 ) {
   for (const renewal of renewals) {
-    if (renewal.renewalHandledAt) continue;
-    if (renewal.urgency !== "overdue" && renewal.urgency !== "soon") continue;
-
-    const reason: RenewalLossReason =
-      renewal.urgency === "overdue"
-        ? renewal.renewalType === "auto_renew"
-          ? "auto_renew_missed"
-          : "overdue"
-        : "due_soon";
-
-    if (renewal.value <= 0) continue;
-
-    const savingsRate = savingsRateForContract(reason, renewal.renewalType, baseRate);
-    lineItems.set(renewal.contractId, {
-      contractId: renewal.contractId,
-      contractName: renewal.contractName,
-      vendorId: renewal.vendorId,
-      vendorName: renewal.vendorName,
-      annualValue: renewal.value,
-      valueIsEstimated: false,
-      estimatedAnnualLoss: Math.round(renewal.value * savingsRate),
-      savingsRate,
-      reason,
-      renewalType: renewal.renewalType,
-      detail: reasonDetail(reason, renewal.renewalType, renewal.actionDate),
-    });
+    // Prefer vendor-sourced line items when present; fill gaps from the renewals feed.
+    if (lineItems.has(renewal.contractId)) continue;
+    const item = calculateRenewalItemLoss({ item: renewal, medianValue, savingsRate: baseRate });
+    if (item) lineItems.set(item.contractId, item);
   }
 }
 
@@ -246,7 +267,9 @@ export function calculateRenewalLoss(params: {
   const lineItems = new Map<string, RenewalLossLineItem>();
 
   for (const vendor of params.vendors) {
-    if (vendor.status !== "active") continue;
+    // Pending vendors still have real contracts to renegotiate; only skip inactive.
+    if (vendor.status === "inactive") continue;
+    const spendFallback = vendorYtdSpend(vendor);
     for (const contract of vendor.contracts) {
       const item = classifyContract({
         contract,
@@ -254,13 +277,14 @@ export function calculateRenewalLoss(params: {
         vendorName: vendor.name,
         medianValue,
         baseRate,
+        vendorSpendFallback: spendFallback,
       });
       if (item) lineItems.set(item.contractId, item);
     }
   }
 
   if (params.renewals?.length) {
-    mergeRenewalItems(lineItems, params.renewals, baseRate);
+    mergeRenewalItems(lineItems, params.renewals, medianValue, baseRate);
   }
 
   const sortedItems = [...lineItems.values()].sort(

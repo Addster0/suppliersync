@@ -183,6 +183,36 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+/** Best-effort plain text for multipart MIME (helps corporate / Gmail filters). */
+function htmlToPlainText(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/h1>/gi, "\n\n")
+    .replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Reply-To must be a SupplierSync mailbox — never the recipient (looks spoofy to filters). */
+function resolveReplyTo(fromEmail: string) {
+  const override = Deno.env.get("RENEWAL_REPLY_TO")?.trim();
+  if (override) return override;
+
+  const match = fromEmail.match(/<([^>]+)>/);
+  const addr = (match?.[1] ?? fromEmail).trim();
+  if (!addr.includes("@") || addr.includes("resend.dev")) return undefined;
+  return addr;
+}
+
 async function sendEmail(params: {
   resendKey: string;
   fromEmail: string;
@@ -196,6 +226,7 @@ async function sendEmail(params: {
     to: params.to,
     subject: params.subject,
     html: params.html,
+    text: htmlToPlainText(params.html),
   };
 
   if (params.replyTo?.trim()) {
@@ -423,6 +454,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RENEWAL_FROM_EMAIL") ?? "SupplierSync <renewals@suppliersync.org>";
+    const replyTo = resolveReplyTo(fromEmail);
     const appUrl = Deno.env.get("APP_URL") ?? "https://suppliersync.org";
     const cronSecret = Deno.env.get("CRON_SECRET");
 
@@ -553,7 +585,7 @@ Deno.serve(async (req) => {
         to: [recipientEmail],
         subject: `[Test] SupplierSync renewals — ${org.name}`,
         html,
-        replyTo: recipientEmail,
+        replyTo,
       });
 
       return jsonResponse({
@@ -617,7 +649,7 @@ Deno.serve(async (req) => {
           to: recipients,
           subject: `SupplierSync renewals — ${org.name}`,
           html,
-          replyTo: recipients[0],
+          replyTo,
         });
 
         const logRows = lines.map((line) => ({
@@ -805,7 +837,7 @@ Deno.serve(async (req) => {
         to: [recipientEmail],
         subject: `[Test] SupplierSync ${label} — ${org.name}`,
         html,
-        replyTo: recipientEmail,
+        replyTo,
       });
 
       return jsonResponse({
@@ -889,7 +921,7 @@ Deno.serve(async (req) => {
           to: recipients,
           subject: `SupplierSync ${label} — ${org.name}`,
           html,
-          replyTo: recipients[0],
+          replyTo,
         });
 
         const { error: logError } = await admin.from("workspace_digest_log").insert({

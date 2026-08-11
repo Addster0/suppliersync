@@ -1,5 +1,5 @@
 import type { Vendor } from "../types";
-import { getContractActionDate } from "./renewals";
+import { getContractUrgencyDate } from "./renewals";
 
 export type SetupStepId = "workspace" | "vendors" | "renewal" | "contact" | "document";
 
@@ -20,7 +20,7 @@ export function buildSetupSteps(
   const hasWorkspace = Boolean(workspaceName?.trim());
   const hasVendor = vendors.length > 0;
   const hasRenewal = vendors.some((vendor) =>
-    vendor.contracts.some((contract) => Boolean(getContractActionDate(contract)))
+    vendor.contracts.some((contract) => Boolean(getContractUrgencyDate(contract)))
   );
   const hasContact = vendors.some((vendor) => vendor.contacts.length > 0);
   const hasDocument = vendors.some(

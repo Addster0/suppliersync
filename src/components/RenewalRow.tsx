@@ -209,9 +209,9 @@ export function RenewalsEmptyState({ handled = false }: { handled?: boolean }) {
     <div className="renewals-empty card">
       <h3>No renewals on the horizon</h3>
       <p className="muted small">
-        Contracts with renewal or review dates in the next 90 days (or overdue in the last 30) appear here.
-        Set renewal type and review dates on each vendor&apos;s <strong>Contracts</strong> tab — no need for
-        placeholder end dates on auto-renewing agreements.
+        Unhandled contracts that are overdue/expired, due within 30 days, or coming up in the next 90 days appear
+        here. If you already added contracts, open each vendor&apos;s <strong>Contracts</strong> tab and confirm
+        the contract end or review date is set — then return here.
       </p>
     </div>
   );

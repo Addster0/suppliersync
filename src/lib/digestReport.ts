@@ -424,8 +424,12 @@ export function openDigestReportPreview(params: {
     <div class="stat"><strong>${data.vendorCount}</strong><span>Vendors tracked</span></div>
     <div class="stat"><strong>${data.evaluationCount}</strong><span>Scorecard reviews</span></div>
     ${
-      data.renewalLoss.totalEstimatedAnnualLoss > 0
-        ? `<div class="stat stat--warn"><strong>${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr</strong><span>Est. renewal savings at risk · ${data.renewalLoss.atRiskContractCount} contract${data.renewalLoss.atRiskContractCount === 1 ? "" : "s"}</span></div>`
+      data.renewalLoss.atRiskContractCount > 0
+        ? `<div class="stat stat--warn"><strong>${
+            data.renewalLoss.totalEstimatedAnnualLoss > 0
+              ? `${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr`
+              : `${data.renewalLoss.atRiskContractCount}`
+          }</strong><span>Est. renewal savings at risk · ${data.renewalLoss.atRiskContractCount} contract${data.renewalLoss.atRiskContractCount === 1 ? "" : "s"}</span></div>`
         : ""
     }
   </div>
@@ -441,8 +445,12 @@ export function openDigestReportPreview(params: {
 
   <h2>Contract renewal savings at risk</h2>
   ${
-    data.renewalLoss.totalEstimatedAnnualLoss > 0
-      ? `<p class="muted">Estimated annual savings left on the table if out-of-date contracts are not renegotiated (~${data.renewalLoss.savingsRatePercent}% typical savings).</p>
+    data.renewalLoss.atRiskContractCount > 0
+      ? `<p class="muted">Estimated annual savings left on the table if out-of-date contracts are not renegotiated (~${data.renewalLoss.savingsRatePercent}% typical savings)${
+          data.renewalLoss.totalEstimatedAnnualLoss > 0
+            ? ""
+            : " — add annual contract values to estimate dollar impact"
+        }.</p>
          <table><tr><th>Contract</th><th>Vendor</th><th>Est. yearly loss</th></tr>${renewalLossRows}</table>
          <p class="muted">Illustrative estimate only — not financial or legal advice.</p>`
       : `<p class="muted">No out-of-date contracts detected — renewals look current.</p>`

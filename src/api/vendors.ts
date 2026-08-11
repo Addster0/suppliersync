@@ -17,13 +17,13 @@ import type {
 } from "../types";
 import { parseCriteria, type EvaluationRecommendation } from "../lib/evaluations";
 import {
-  RENEWAL_LOOKAHEAD_DAYS,
-  RENEWAL_RECENT_EXPIRED_DAYS,
   daysUntilEnd,
   formatDateForQuery,
-  getContractActionDate,
   getContractDateLabel,
+  getContractUrgencyDate,
   getRenewalUrgency,
+  isContractOverdue,
+  buildOpenRenewalsFromVendors,
 } from "../lib/renewals";
 import { isSampleVendor } from "../lib/sampleVendors";
 import {
@@ -171,7 +171,7 @@ function mapContractRow(row: ContractRow): Contract {
     renewalType: row.renewal_type ?? "fixed_term",
     noticePeriodDays: row.notice_period_days,
     termMonths: row.term_months,
-    value: Number(row.value),
+    value: Number.isFinite(Number(row.value)) ? Number(row.value) : 0,
     status: row.status,
     createdAt: row.created_at?.slice(0, 10),
     renewalHandledAt: row.renewal_handled_at ?? null,
@@ -312,6 +312,29 @@ async function fetchStickyNotesByVendor(
   return byVendor;
 }
 
+/** Flat contracts query — more reliable than nested embeds for renewals tracking counts. */
+async function fetchContractsByVendor(organizationId: string): Promise<Map<string, Contract[]>> {
+  const { data, error } = await requireSupabase()
+    .from("contracts")
+    .select(
+      "id, vendor_id, title, start_date, end_date, renewal_date, renewal_type, notice_period_days, term_months, value, status, created_at, renewal_handled_at, renewal_handled_note, file_url, file_name, file_size, mime_type"
+    )
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const byVendor = new Map<string, Contract[]>();
+  for (const row of data ?? []) {
+    const typed = row as ContractRow & { vendor_id: string };
+    const contract = mapContractRow(typed);
+    const list = byVendor.get(typed.vendor_id) ?? [];
+    list.push(contract);
+    byVendor.set(typed.vendor_id, list);
+  }
+  return byVendor;
+}
+
 export async function fetchVendors(organizationId: string): Promise<Vendor[]> {
   const { data, error } = await requireSupabase()
     .from("vendors")
@@ -325,11 +348,22 @@ export async function fetchVendors(organizationId: string): Promise<Vendor[]> {
 
   const vendors = (data as VendorRow[]).map(mapVendor);
 
+  let contractsByVendor = new Map<string, Contract[]>();
+  try {
+    contractsByVendor = await fetchContractsByVendor(organizationId);
+  } catch (contractsError) {
+    if (import.meta.env.DEV) {
+      console.warn(contractsError);
+    }
+  }
+
   try {
     // Load notes separately — more reliable than PostgREST embeds for this table.
     const notesByVendor = await fetchStickyNotesByVendor(organizationId);
     return vendors.map((vendor) => ({
       ...vendor,
+      // Prefer flat contracts query so "Vendors with contracts" matches Contracts tab rows.
+      contracts: contractsByVendor.get(vendor.id) ?? vendor.contracts,
       stickyNotes: notesByVendor.get(vendor.id) ?? [],
     }));
   } catch (notesError) {
@@ -337,7 +371,10 @@ export async function fetchVendors(organizationId: string): Promise<Vendor[]> {
     if (import.meta.env.DEV) {
       console.warn(notesError);
     }
-    return vendors;
+    return vendors.map((vendor) => ({
+      ...vendor,
+      contracts: contractsByVendor.get(vendor.id) ?? vendor.contracts,
+    }));
   }
 }
 
@@ -398,7 +435,7 @@ export async function createVendor(
       notes: input.notes ?? "",
       address: input.address ?? "",
       directory_id: input.directoryId ?? null,
-      status: "pending",
+      status: "active",
     })
     .select(vendorSelect)
     .single();
@@ -995,9 +1032,10 @@ export async function importVendorsFromCsv(
       });
     }
 
-    if (row.contractName && row.contractEndDate) {
+    // End date alone is enough — name can default to the vendor so renewals still track.
+    if (row.contractEndDate) {
       await addContract(organizationId, vendor.id, {
-        name: row.contractName,
+        name: row.contractName?.trim() || `${row.name} agreement`,
         startDate: today,
         endDate: row.contractEndDate,
         renewalDate: null,
@@ -1058,7 +1096,7 @@ export async function seedSampleVendors(organizationId: string): Promise<void> {
     {
       name: "Brightline Services",
       category: "Maintenance",
-      status: "pending" as Status,
+      status: "active" as Status,
       notes: "Waiting on signed contract and insurance document.",
       contracts: [
         {
@@ -1132,10 +1170,12 @@ export async function seedSampleVendors(organizationId: string): Promise<void> {
 function mapRenewalRow(row: {
   id: string;
   title: string;
+  start_date?: string | null;
   end_date: string | null;
   renewal_date: string | null;
   renewal_type: ContractRenewalType;
   notice_period_days: number | null;
+  term_months?: number | null;
   value: number;
   status: string;
   vendor_id: string;
@@ -1148,32 +1188,50 @@ function mapRenewalRow(row: {
 }): RenewalItem | null {
   const vendor = row.vendors;
   const vendorName = Array.isArray(vendor) ? vendor[0]?.name : vendor?.name;
-  if (!vendorName) return null;
+  // Never drop renewals solely because the vendors embed failed — Contracts tab still has them.
+  const resolvedVendorName = vendorName?.trim() || "Unknown vendor";
 
   const renewalType = (row.renewal_type ?? "fixed_term") as ContractRenewalType;
-  const actionDate = getContractActionDate({
+  const status = row.status as Status;
+  const dateFields = {
     renewalType,
     endDate: row.end_date,
     renewalDate: row.renewal_date,
     noticePeriodDays: row.notice_period_days,
-  });
+    startDate: row.start_date ?? undefined,
+    termMonths: row.term_months ?? null,
+    status,
+    renewalHandledAt: row.renewal_handled_at ?? null,
+  };
+  const overdue = isContractOverdue(dateFields);
+  const actionDate = getContractUrgencyDate(dateFields);
 
-  if (!actionDate) return null;
+  let effectiveDate =
+    actionDate ?? row.end_date ?? row.renewal_date ?? row.start_date ?? null;
+  if (!effectiveDate) {
+    if (!overdue && status !== "expired") return null;
+    effectiveDate = "1970-01-01";
+  }
 
-  const days = daysUntilEnd(actionDate);
+  const days = daysUntilEnd(effectiveDate);
+  const daysForWindow = Number.isFinite(days) ? days : -9999;
+  const urgency =
+    overdue || status === "expired" || daysForWindow < 0
+      ? "overdue"
+      : getRenewalUrgency(daysForWindow);
   return {
     contractId: row.id,
     contractName: row.title,
     vendorId: row.vendor_id,
-    vendorName,
-    actionDate,
+    vendorName: resolvedVendorName,
+    actionDate: effectiveDate,
     dateLabel: getContractDateLabel(renewalType),
     renewalType,
-    endDate: actionDate,
-    value: Number(row.value),
-    status: row.status as Status,
-    daysUntilEnd: days,
-    urgency: getRenewalUrgency(days),
+    endDate: effectiveDate,
+    value: Number.isFinite(Number(row.value)) ? Number(row.value) : 0,
+    status,
+    daysUntilEnd: daysForWindow,
+    urgency,
     renewalHandledAt: row.renewal_handled_at ?? null,
     renewalHandledNote: row.renewal_handled_note ?? null,
     fileUrl: row.file_url && row.file_name ? normalizeStorageFileUrl(row.file_url) : undefined,
@@ -1203,39 +1261,10 @@ const renewalSelect = `
 `;
 
 export async function fetchUpcomingRenewals(organizationId: string): Promise<RenewalItem[]> {
-  const client = requireSupabase();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const rangeStart = new Date(today);
-  rangeStart.setDate(rangeStart.getDate() - RENEWAL_RECENT_EXPIRED_DAYS);
-
-  const rangeEnd = new Date(today);
-  rangeEnd.setDate(rangeEnd.getDate() + RENEWAL_LOOKAHEAD_DAYS);
-
-  const startIso = formatDateForQuery(rangeStart);
-  const endIso = formatDateForQuery(rangeEnd);
-
-  // Fetch all unhandled contracts; filter by getContractActionDate in JS so auto-renew
-  // notice deadlines are included even when end_date falls outside the window.
-  const { data, error } = await client
-    .from("contracts")
-    .select(renewalSelect)
-    .eq("organization_id", organizationId)
-    .is("renewal_handled_at", null)
-    .order("end_date", { ascending: true, nullsFirst: false });
-
-  if (error) throw new Error(error.message);
-
-  const items: RenewalItem[] = [];
-
-  for (const row of data ?? []) {
-    const item = mapRenewalRow(row);
-    if (!item || item.actionDate < startIso || item.actionDate > endIso) continue;
-    items.push(item);
-  }
-
-  return items.sort((a, b) => a.actionDate.localeCompare(b.actionDate));
+  // Build from the same vendor+contract graph as the Contracts tab so expired/onboarded
+  // contracts cannot vanish due to embed/join filtering on a separate contracts query.
+  const vendors = await fetchVendors(organizationId);
+  return buildOpenRenewalsFromVendors(vendors);
 }
 
 export async function fetchHandledRenewals(organizationId: string): Promise<RenewalItem[]> {

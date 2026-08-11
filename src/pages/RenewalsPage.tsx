@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchRenewalEmailStatus, sendDigestTest, sendRenewalReminderTest, setAnnualDigestEnabled, setMonthlyDigestEnabled, setRenewalRemindersEnabled } from "../api/renewalReminders";
 import type { RenewalEmailStatus } from "../api/renewalReminders";
-import { fetchUpcomingRenewals, fetchHandledRenewals, fetchVendors, setRenewalHandled } from "../api/vendors";
+import { fetchHandledRenewals, fetchVendors, setRenewalHandled } from "../api/vendors";
 import { NeedsAttentionPanel } from "../components/NeedsAttentionPanel";
 import { RenewalLossCalculator } from "../components/RenewalLossCalculator";
 import { ItemFilterChips } from "../components/ItemFilterChips";
@@ -12,7 +12,7 @@ import { useOrganization } from "../contexts/OrganizationContext";
 import { MAIN_CONTENT_ID } from "../lib/a11y";
 import { openClinicReport } from "../lib/clinicReport";
 import { openDigestReportPreview } from "../lib/digestReport";
-import { RENEWAL_LOOKAHEAD_DAYS, RENEWAL_RECENT_EXPIRED_DAYS, urgencyLabel } from "../lib/renewals";
+import { RENEWAL_LOOKAHEAD_DAYS, buildOpenRenewalsFromVendors, urgencyLabel } from "../lib/renewals";
 import { getMedianContractValue } from "../lib/renewalLossCalculator";
 import { requireSupabase } from "../lib/supabase";
 import type { RenewalItem, RenewalUrgency, Vendor } from "../types";
@@ -24,24 +24,31 @@ export function RenewalsSummary({
   organizationId,
   compact = false,
   medianContractValue = 0,
+  vendors: vendorsProp,
 }: {
   organizationId: string;
   compact?: boolean;
   medianContractValue?: number;
+  /** When provided, build the list from the same vendor contracts as the Contracts tab. */
+  vendors?: Vendor[];
 }) {
-  const [items, setItems] = useState<RenewalItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [fetchedVendors, setFetchedVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(!vendorsProp);
 
   useEffect(() => {
+    if (vendorsProp) {
+      setLoading(false);
+      return;
+    }
     if (!organizationId) return;
     let cancelled = false;
     setLoading(true);
-    void fetchUpcomingRenewals(organizationId)
+    void fetchVendors(organizationId)
       .then((data) => {
-        if (!cancelled) setItems(data);
+        if (!cancelled) setFetchedVendors(data);
       })
       .catch(() => {
-        if (!cancelled) setItems([]);
+        if (!cancelled) setFetchedVendors([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -49,7 +56,12 @@ export function RenewalsSummary({
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [organizationId, vendorsProp]);
+
+  const items = useMemo(
+    () => buildOpenRenewalsFromVendors(vendorsProp ?? fetchedVendors),
+    [vendorsProp, fetchedVendors],
+  );
 
   if (loading) {
     return compact ? null : <p className="muted small">Loading renewals…</p>;
@@ -70,8 +82,8 @@ export function RenewalsSummary({
           <p className="eyebrow">Upcoming renewals</p>
           {!compact && (
               <p className="muted small">
-                Contracts with renewal or review dates in the next {RENEWAL_LOOKAHEAD_DAYS} days or overdue in the last{" "}
-                {RENEWAL_RECENT_EXPIRED_DAYS} days.
+                Contracts with renewal or review dates in the next {RENEWAL_LOOKAHEAD_DAYS} days, plus any
+                unhandled overdue or expired contracts.
               </p>
           )}
           {compact && (
@@ -115,7 +127,6 @@ export function RenewalsPage() {
   const canManageReminders =
     activeMembership?.role === "owner" || activeMembership?.role === "admin";
   const canMarkHandled = activeMembership?.role !== "viewer";
-  const [items, setItems] = useState<RenewalItem[]>([]);
   const [handledItems, setHandledItems] = useState<RenewalItem[]>([]);
   const [listFilter, setListFilter] = useState<RenewalListFilter>("open");
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -224,16 +235,12 @@ export function RenewalsPage() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    void Promise.all([fetchUpcomingRenewals(organizationId), fetchHandledRenewals(organizationId)])
-      .then(([open, handled]) => {
-        if (!cancelled) {
-          setItems(open);
-          setHandledItems(handled);
-        }
+    void fetchHandledRenewals(organizationId)
+      .then((handled) => {
+        if (!cancelled) setHandledItems(handled);
       })
       .catch((err) => {
         if (!cancelled) {
-          setItems([]);
           setHandledItems([]);
           setError(err instanceof Error ? err.message : "Could not load renewals.");
         }
@@ -246,14 +253,18 @@ export function RenewalsPage() {
     };
   }, [organizationId]);
 
+  // Open renewals come from the same vendor/contract payload as the Contracts tab —
+  // never a separate query that can quietly drop expired rows.
+  const items = useMemo(() => buildOpenRenewalsFromVendors(vendors), [vendors]);
+
   async function reloadRenewals() {
     if (!organizationId) return;
-    const [open, handled] = await Promise.all([
-      fetchUpcomingRenewals(organizationId),
+    const [handled, vendorData] = await Promise.all([
       fetchHandledRenewals(organizationId),
+      fetchVendors(organizationId),
     ]);
-    setItems(open);
     setHandledItems(handled);
+    setVendors(vendorData);
   }
 
   async function handleMarkRenewalHandled(contractId: string, note: string) {
@@ -662,13 +673,16 @@ export function RenewalsPage() {
             ]}
           />
 
-          {loading && <p className="muted">Loading renewals…</p>}
-          {!loading && listFilter === "open" && items.length === 0 && !error && <RenewalsEmptyState />}
+          {loading && loadingVendors && <p className="muted">Loading renewals…</p>}
+          {!loading && !loadingVendors && listFilter === "open" && items.length === 0 && !error && (
+            <RenewalsEmptyState />
+          )}
           {!loading && listFilter === "handled" && handledItems.length === 0 && !error && (
             <RenewalsEmptyState handled />
           )}
 
           {!loading &&
+            !loadingVendors &&
             listFilter === "open" &&
             GROUP_ORDER.map((urgency) =>
               grouped[urgency].length ? (

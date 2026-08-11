@@ -525,12 +525,16 @@ export function buildDigestReportHtml(params: {
       </tr>
     </table>
     ${
-      data.renewalLoss.totalEstimatedAnnualLoss > 0
+      data.renewalLoss.atRiskContractCount > 0
         ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
             <tr>
               <td style="padding:16px;background:#fff7ed;border-radius:12px;border:1px solid #fed7aa;">
                 <p style="margin:0 0 4px;font-size:12px;color:#9a3412;text-transform:uppercase;letter-spacing:0.05em;">Renewal savings at risk</p>
-                <p style="margin:0;font-size:22px;font-weight:700;color:#c2410c;">${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr</p>
+                <p style="margin:0;font-size:22px;font-weight:700;color:#c2410c;">${
+                  data.renewalLoss.totalEstimatedAnnualLoss > 0
+                    ? `${escapeHtml(formatCurrency(data.renewalLoss.totalEstimatedAnnualLoss))}/yr`
+                    : `${data.renewalLoss.atRiskContractCount} at risk`
+                }</p>
                 <p style="margin:6px 0 0;font-size:13px;color:#9a3412;">${data.renewalLoss.atRiskContractCount} out-of-date contract${data.renewalLoss.atRiskContractCount === 1 ? "" : "s"} · ~${data.renewalLoss.savingsRatePercent}% typical renegotiation savings</p>
               </td>
             </tr>
@@ -563,8 +567,12 @@ export function buildDigestReportHtml(params: {
 
     <h2 style="margin:28px 0 8px;font-size:16px;color:#172033;">Contract renewal savings at risk</h2>
     ${
-      data.renewalLoss.totalEstimatedAnnualLoss > 0
-        ? `<p style="margin:0 0 12px;color:#64748b;font-size:14px;">Estimated annual savings left on the table if out-of-date contracts are not renegotiated or restated.</p>
+      data.renewalLoss.atRiskContractCount > 0
+        ? `<p style="margin:0 0 12px;color:#64748b;font-size:14px;">Estimated annual savings left on the table if out-of-date contracts are not renegotiated or restated${
+            data.renewalLoss.totalEstimatedAnnualLoss > 0
+              ? ""
+              : " — add annual contract values to estimate dollar impact"
+          }.</p>
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <th style="text-align:left;padding:8px 0;color:#64748b;font-size:12px;border-bottom:1px solid #e2e8f0;">Contract</th>

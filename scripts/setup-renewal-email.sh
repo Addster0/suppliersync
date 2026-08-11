@@ -34,6 +34,11 @@ supabase secrets set \
   "RENEWAL_FROM_EMAIL=${FROM_EMAIL}" \
   "CRON_SECRET=${CRON_SECRET}"
 
+if [[ -n "${RENEWAL_REPLY_TO:-}" ]]; then
+  echo "  RENEWAL_REPLY_TO=${RENEWAL_REPLY_TO}"
+  supabase secrets set "RENEWAL_REPLY_TO=${RENEWAL_REPLY_TO}"
+fi
+
 echo ""
 # pg_net cron invokes this without a JWT; auth is via x-cron-secret header.
 echo "Deploying send-renewal-reminders (no JWT — pg_cron/pg_net; auth via x-cron-secret)..."

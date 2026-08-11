@@ -86,6 +86,24 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function htmlToPlainText(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/h1>/gi, "\n\n")
+    .replace(/<\/h2>/gi, "\n\n")
+    .replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function sendViaResend(params: {
   resendKey: string;
   fromEmail: string;
@@ -99,6 +117,7 @@ async function sendViaResend(params: {
     to: [params.to],
     subject: params.subject,
     html: params.html,
+    text: htmlToPlainText(params.html),
   };
 
   if (params.replyTo?.trim()) {

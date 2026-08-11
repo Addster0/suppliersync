@@ -1,4 +1,4 @@
-import { getContractActionDate } from "./renewals";
+import { getContractActionDate, resolveContractEndDate } from "./renewals";
 import type { Contract, DocumentItem } from "../types";
 
 /** Items uploaded/created within this window count as "new" until viewed. */
@@ -67,7 +67,9 @@ export function classifyContract(
   viewedIds: Set<string>
 ): ItemLifecycle {
   if (contract.status === "expired") return "expired";
-  if (contract.renewalType === "fixed_term" && isPastDate(contract.endDate)) return "expired";
+  if (contract.renewalType === "fixed_term" && isPastDate(resolveContractEndDate(contract))) {
+    return "expired";
+  }
 
   const actionDate = getContractActionDate(contract);
   if (
@@ -77,6 +79,9 @@ export function classifyContract(
   ) {
     return "expired";
   }
+
+  // Past term end always counts as expired, even if a future review date was stored.
+  if (isPastDate(resolveContractEndDate(contract))) return "expired";
 
   if (isWithinNewWindow(contract.createdAt) && !viewedIds.has(contract.id)) return "new";
   return "active";

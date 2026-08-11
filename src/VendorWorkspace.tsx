@@ -102,13 +102,13 @@ import {
   CONTRACT_REVIEW_LABEL,
   CONTRACT_START_HINT,
   CONTRACT_START_LABEL,
-  RENEWAL_LOOKAHEAD_DAYS,
-  RENEWAL_RECENT_EXPIRED_DAYS,
   RENEWAL_TYPE_OPTIONS,
   addMonthsToIsoDate,
   computeSuggestedReviewDate,
   daysUntilEnd,
-  getContractActionDate,
+  getContractUrgencyDate,
+  isContractOverdue,
+  isInOpenRenewalsWindow,
   renewalTypeLabel,
   validateContractDates,
 } from "./lib/renewals";
@@ -155,7 +155,7 @@ function emptyContractDraft(): ContractFormDraft {
     noticePeriodDays: "",
     termMonths: "",
     value: "",
-    status: "pending",
+    status: "active",
     file: null,
     extractError: "",
     extractNotice: "",
@@ -311,7 +311,8 @@ function buildContractPayload(draft: ContractFormDraft): Omit<Contract, "id"> {
     name: draft.name.trim(),
     startDate: draft.startDate,
     endDate: draft.endDate || null,
-    renewalDate: draft.renewalDate || null,
+    // Fixed-term renewals are driven by end date; drop leftover review dates from extract/type switches.
+    renewalDate: draft.renewalType === "fixed_term" ? null : draft.renewalDate || null,
     renewalType: draft.renewalType,
     noticePeriodDays: draft.noticePeriodDays ? Number(draft.noticePeriodDays) : null,
     termMonths: draft.termMonths ? Number(draft.termMonths) : null,
@@ -855,6 +856,7 @@ export function VendorWorkspace() {
           compact
           medianContractValue={medianContractValue}
           organizationId={organizationId}
+          vendors={vendors}
         />
         {loadError && (
           <div className="banner error" role="alert">
@@ -1376,10 +1378,14 @@ function ContractsSection({
   }
 
   function contractInRenewalWindow(contract: Contract): boolean {
-    const actionDate = getContractActionDate(contract);
-    if (!actionDate) return false;
-    const days = daysUntilEnd(actionDate);
-    return days >= -RENEWAL_RECENT_EXPIRED_DAYS && days <= RENEWAL_LOOKAHEAD_DAYS;
+    if (contract.status === "inactive") return false;
+    if (contract.renewalHandledAt) return false;
+    if (isContractOverdue(contract) || contract.status === "expired") return true;
+    const urgencyDate = getContractUrgencyDate(contract);
+    if (!urgencyDate) return false;
+    const days = daysUntilEnd(urgencyDate);
+    if (!Number.isFinite(days)) return false;
+    return isInOpenRenewalsWindow(days);
   }
 
   async function handleMarkContractRenewalHandled(contractId: string) {

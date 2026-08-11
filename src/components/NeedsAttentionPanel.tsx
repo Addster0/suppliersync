@@ -53,7 +53,7 @@ export function NeedsAttentionPanel({
             <strong>{money(spendSummary.ytd)}</strong>
           </div>
           <div className="attention-stat">
-            <span className="attention-stat-label">Tracked vendors</span>
+            <span className="attention-stat-label">Vendors with contracts</span>
             <strong>
               {spendSummary.trackedVendors}/{spendSummary.vendorCount}
             </strong>

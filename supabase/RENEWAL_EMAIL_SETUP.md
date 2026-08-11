@@ -20,20 +20,57 @@ This sets secrets, `APP_URL=https://suppliersync.org`, and redeploys the edge fu
 4. In Supabase **SQL Editor**, run migrations **006**, **007**, **008**, and **009** if you have not already.
 5. Open **Renewals** → **Send test email** — mail should arrive in that Gmail inbox.
 
-### B. Production (any clinic Gmail)
+### B. Production (any clinic Gmail / corporate inbox)
 
 Resend **sandbox** (`onboarding@resend.dev`) cannot deliver to arbitrary addresses. For real customers:
 
-1. In Resend → **Domains** → add your domain (e.g. `suppliersync.com` or a subdomain).
-2. Add the DNS records Resend shows (TXT/MX/CNAME).
-3. Set Supabase secret:
+1. In Resend → **Domains** → add your domain (e.g. `suppliersync.org`).
+2. Add the DNS records Resend shows (DKIM + SPF/MX on the `send` subdomain — see [DNS checklist](#dns-checklist-cloudflare--resend) below).
+3. Set Supabase secrets:
 
 ```bash
-supabase secrets set RENEWAL_FROM_EMAIL="SupplierSync <renewals@yourdomain.com>"
-supabase functions deploy send-renewal-reminders
+supabase secrets set RENEWAL_FROM_EMAIL="SupplierSync <renewals@suppliersync.org>"
+# Optional — defaults to renewals@suppliersync.org from the From address
+# supabase secrets set RENEWAL_REPLY_TO="renewals@suppliersync.org"
+supabase functions deploy send-renewal-reminders --no-verify-jwt
 ```
 
-4. Send a test from the app to a different Gmail — it should arrive.
+4. Send a test from the app to a different inbox — it should arrive.
+
+---
+
+## DNS checklist (Cloudflare + Resend)
+
+Resend verifies and sends using records on the **`send` subdomain**, not by replacing your apex SPF. Live `suppliersync.org` should look like:
+
+| Record | Name | Value | Status |
+|--------|------|-------|--------|
+| TXT (DKIM) | `resend._domainkey` | `p=…` (from Resend dashboard) | Required |
+| TXT (SPF) | `send` | `v=spf1 include:amazonses.com ~all` | Required — Resend official include |
+| MX | `send` | `10 feedback-smtp.us-east-1.amazonses.com` | Required (region may vary) |
+| TXT (DMARC) | `_dmarc` | see below | Strongly recommended |
+| TXT (apex SPF) | `@` / apex | e.g. Namecheap forwarding `include:spf.efwd…` | Keep as-is for receiving/forwarding |
+
+**Do not replace** apex SPF with Resend’s `include:amazonses.com`. Resend’s SPF belongs on `send`. Apex SPF only authorizes mail that uses the apex as MAIL FROM (e.g. Namecheap forwarding). Adding Amazonses there is optional and can burn SPF’s 10-lookup limit when nested with other includes.
+
+### DMARC edit (recommended — currently incomplete)
+
+Cloudflare → DNS → edit the existing `_dmarc` TXT record:
+
+| Field | Value |
+|-------|-------|
+| Type | `TXT` |
+| Name | `_dmarc` |
+| Content | `v=DMARC1; p=none; rua=mailto:renewals@suppliersync.org;` |
+
+Keep `p=none` until you confirm Resend (and any other senders) pass DMARC in real mail headers. Ensure `renewals@suppliersync.org` (or another address you choose for `rua`) actually receives mail via Namecheap forwarding / your inbox provider.
+
+### After DNS changes
+
+1. Wait for propagation (often minutes; up to 48h).
+2. In Resend → Domains → confirm the domain stays **Verified**.
+3. Open a sent email in Resend → check **Deliverability Insights**.
+4. For stubborn corporate recipients (e.g. `@hinet.org`), ask their IT to check quarantine and allowlist `suppliersync.org` — that is outside SupplierSync control.
 
 ---
 
@@ -52,7 +89,8 @@ In Supabase → **SQL Editor**, run:
 | Secret | Example |
 |--------|---------|
 | `RESEND_API_KEY` | `re_...` |
-| `RENEWAL_FROM_EMAIL` | `SupplierSync <renewals@yourdomain.com>` |
+| `RENEWAL_FROM_EMAIL` | `SupplierSync <renewals@suppliersync.org>` |
+| `RENEWAL_REPLY_TO` | `renewals@suppliersync.org` (optional; defaults from From) |
 | `APP_URL` | `https://suppliersync.org` |
 | `CRON_SECRET` | Long random string for daily cron calls |
 
@@ -145,6 +183,7 @@ Same for `monthly_cron` / `annual_cron`. Orgs with `monthly_digest_enabled = fal
 | Symptom | Fix |
 |---------|-----|
 | Success in app, wrong inbox | Resend sandbox — verify domain or use Resend signup email |
+| Resend shows Delivered, corporate inbox empty | Check recipient quarantine / junk; ask IT to allowlist `suppliersync.org` |
 | Links go to localhost | Set `APP_URL` secret to `https://suppliersync.org` |
 | `RESEND_API_KEY is not configured` | Run setup script or add secret + redeploy |
 | `renewal_reminders_enabled does not exist` | Run migration 006 |

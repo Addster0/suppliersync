@@ -1,4 +1,4 @@
-import { daysUntilEnd, getContractActionDate, getRenewalUrgency } from "./renewals";
+import { daysUntilEnd, getContractUrgencyDate, getRenewalUrgency, isContractOverdue } from "./renewals";
 import { vendorYtdSpend } from "./spend";
 import type { DocumentItem, RenewalItem, Vendor } from "../types";
 
@@ -44,6 +44,7 @@ function expiredComplianceDocs(vendor: Vendor) {
 
 export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]): AttentionItem[] {
   const items: AttentionItem[] = [];
+  const listedContractIds = new Set(renewals.map((item) => item.contractId));
 
   for (const renewal of renewals) {
     if (renewal.urgency === "overdue" || renewal.urgency === "soon") {
@@ -59,6 +60,8 @@ export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]):
   }
 
   for (const vendor of vendors) {
+    if (vendor.status === "inactive") continue;
+
     if (vendor.status === "active" && vendor.contacts.length === 0) {
       items.push({
         id: `contact-${vendor.id}`,
@@ -70,49 +73,63 @@ export function buildAttentionItems(vendors: Vendor[], renewals: RenewalItem[]):
       });
     }
 
-    if (vendor.status !== "active") continue;
+    if (vendor.status === "active") {
+      for (const docType of REQUIRED_COMPLIANCE) {
+        if (!vendorHasDocType(vendor.documents, docType)) {
+          items.push({
+            id: `missing-${docType}-${vendor.id}`,
+            severity: "info",
+            title: `Missing ${complianceLabel(docType)}`,
+            detail: `${vendor.name} — upload to Documents for compliance tracking.`,
+            href: `/app?vendor=${vendor.id}&tab=documents`,
+            actionLabel: "Upload document",
+          });
+        }
+      }
 
-    for (const docType of REQUIRED_COMPLIANCE) {
-      if (!vendorHasDocType(vendor.documents, docType)) {
+      for (const doc of expiredComplianceDocs(vendor)) {
         items.push({
-          id: `missing-${docType}-${vendor.id}`,
-          severity: "info",
-          title: `Missing ${complianceLabel(docType)}`,
-          detail: `${vendor.name} — upload to Documents for compliance tracking.`,
+          id: `expired-doc-${doc.id}`,
+          severity: "critical",
+          title: "Compliance document expired",
+          detail: `${vendor.name} · ${complianceLabel(doc.docType)} expired ${doc.expiresAt}`,
           href: `/app?vendor=${vendor.id}&tab=documents`,
-          actionLabel: "Upload document",
+          actionLabel: "Update document",
         });
       }
     }
 
-    for (const doc of expiredComplianceDocs(vendor)) {
-      items.push({
-        id: `expired-doc-${doc.id}`,
-        severity: "critical",
-        title: "Compliance document expired",
-        detail: `${vendor.name} · ${complianceLabel(doc.docType)} expired ${doc.expiresAt}`,
-        href: `/app?vendor=${vendor.id}&tab=documents`,
-        actionLabel: "Update document",
-      });
-    }
-
     for (const contract of vendor.contracts) {
-      const actionDate = getContractActionDate(contract);
-      if (!actionDate) continue;
-      const days = daysUntilEnd(actionDate);
+      if (contract.renewalHandledAt || contract.status === "inactive") continue;
+      if (listedContractIds.has(contract.id)) continue;
+
+      const urgencyDate = getContractUrgencyDate(contract);
+
+      if (isContractOverdue(contract)) {
+        items.push({
+          id: `contract-overdue-${contract.id}`,
+          severity: "critical",
+          title: "Contract overdue",
+          detail: `${contract.name} · ${vendor.name}${urgencyDate ? ` · ${urgencyDate}` : ""}`,
+          href: `/app?vendor=${vendor.id}&tab=contracts`,
+          actionLabel: "View contract",
+        });
+        continue;
+      }
+
+      if (!urgencyDate) continue;
+      const days = daysUntilEnd(urgencyDate);
+      if (!Number.isFinite(days)) continue;
       const urgency = getRenewalUrgency(days);
-      if (urgency === "upcoming" && days <= 60) {
-        const alreadyListed = renewals.some((item) => item.contractId === contract.id);
-        if (!alreadyListed) {
-          items.push({
-            id: `contract-soon-${contract.id}`,
-            severity: "info",
-            title: "Upcoming contract review",
-            detail: `${contract.name} · ${vendor.name} · ${actionDate}`,
-            href: `/app?vendor=${vendor.id}&tab=contracts`,
-            actionLabel: "Review contract",
-          });
-        }
+      if (urgency === "soon" || (urgency === "upcoming" && days <= 60)) {
+        items.push({
+          id: `contract-soon-${contract.id}`,
+          severity: urgency === "soon" ? "warning" : "info",
+          title: urgency === "soon" ? "Renewal due soon" : "Upcoming contract review",
+          detail: `${contract.name} · ${vendor.name} · ${urgencyDate}`,
+          href: `/app?vendor=${vendor.id}&tab=contracts`,
+          actionLabel: "Review contract",
+        });
       }
     }
   }
@@ -180,6 +197,8 @@ export function isOnboardingComplete(steps: OnboardingStep[]) {
 
 export function workspaceSpendSummary(vendors: Vendor[]) {
   const ytd = vendors.reduce((sum, vendor) => sum + vendorYtdSpend(vendor), 0);
-  const trackedVendors = vendors.filter((vendor) => vendor.ledger.length > 0).length;
-  return { ytd, trackedVendors, vendorCount: vendors.length };
+  /** Vendors with at least one contract on file (renewals / contract tracking). */
+  const trackedVendors = vendors.filter((vendor) => vendor.contracts.length > 0).length;
+  const vendorsWithSpend = vendors.filter((vendor) => vendor.ledger.length > 0).length;
+  return { ytd, trackedVendors, vendorsWithSpend, vendorCount: vendors.length };
 }

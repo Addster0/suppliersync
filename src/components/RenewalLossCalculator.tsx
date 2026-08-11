@@ -29,7 +29,9 @@ export function RenewalLossCalculator({
     [vendors, renewals],
   );
 
-  const hasLoss = summary.totalEstimatedAnnualLoss > 0;
+  // Dollar estimate can be $0 when values are missing — still treat at-risk contracts as detected.
+  const hasAtRisk = summary.atRiskContractCount > 0;
+  const hasDollarEstimate = summary.totalEstimatedAnnualLoss > 0;
 
   return (
     <>
@@ -43,10 +45,17 @@ export function RenewalLossCalculator({
         onClick={() => setOpen(true)}
         type="button"
       >
-        {hasLoss ? (
+        {hasDollarEstimate ? (
           <>
             <span className="renewal-loss-trigger-label">Estimated yearly loss</span>
             <strong>{money(summary.totalEstimatedAnnualLoss)}/yr</strong>
+          </>
+        ) : hasAtRisk ? (
+          <>
+            <span className="renewal-loss-trigger-label">Out-of-date contracts</span>
+            <strong>
+              {summary.atRiskContractCount} at risk
+            </strong>
           </>
         ) : (
           <span>Check renewal savings</span>
@@ -66,9 +75,11 @@ export function RenewalLossCalculator({
               <div>
                 <p className="eyebrow">Renewal savings calculator</p>
                 <h3 id="renewal-loss-title">
-                  {hasLoss
+                  {hasDollarEstimate
                     ? `You may be leaving ${money(summary.totalEstimatedAnnualLoss)} on the table each year`
-                    : "You're caught up on contract renewals"}
+                    : hasAtRisk
+                      ? `${summary.atRiskContractCount} out-of-date contract${summary.atRiskContractCount === 1 ? "" : "s"} need attention`
+                      : "You're caught up on contract renewals"}
                 </h3>
                 <p className="muted small">
                   Estimates how much you could save by renegotiating or restating out-of-date vendor contracts
@@ -80,7 +91,7 @@ export function RenewalLossCalculator({
               </button>
             </div>
 
-            {hasLoss ? (
+            {hasAtRisk ? (
               <>
                 <div className="renewal-loss-hero">
                   <div className="renewal-loss-stat renewal-loss-stat--primary">
@@ -91,7 +102,7 @@ export function RenewalLossCalculator({
                       {summary.atRiskContractCount === 1 ? "" : "s"} × ~{summary.savingsRatePercent}% typical
                       renegotiation savings
                       {summary.contractsMissingValueCount > 0
-                        ? ` (${summary.contractsMissingValueCount} using estimated contract value)`
+                        ? ` (${summary.contractsMissingValueCount} missing annual value — add values for a better estimate)`
                         : ""}
                       .
                     </p>
@@ -116,16 +127,25 @@ export function RenewalLossCalculator({
                       <div className="renewal-loss-item-main">
                         <div className="renewal-loss-item-head">
                           <strong>{item.contractName}</strong>
-                          <span className="renewal-loss-item-amount">{money(item.estimatedAnnualLoss)}/yr</span>
+                          <span className="renewal-loss-item-amount">
+                            {item.annualValue > 0 ? `${money(item.estimatedAnnualLoss)}/yr` : "Add value"}
+                          </span>
                         </div>
                         <p className="muted small">
                           {item.vendorName} · {RENEWAL_LOSS_REASON_LABELS[item.reason]}
-                          {item.valueIsEstimated ? " · estimated value" : ""}
+                          {item.valueIsEstimated && item.annualValue > 0 ? " · estimated value" : ""}
+                          {item.annualValue <= 0 ? " · no annual value on file" : ""}
                         </p>
                         <p className="muted small">{item.detail}</p>
-                        <p className="muted small renewal-loss-item-math">
-                          {money(item.annualValue)} contract value × {(item.savingsRate * 100).toFixed(0)}% savings
-                        </p>
+                        {item.annualValue > 0 ? (
+                          <p className="muted small renewal-loss-item-math">
+                            {money(item.annualValue)} contract value × {(item.savingsRate * 100).toFixed(0)}% savings
+                          </p>
+                        ) : (
+                          <p className="muted small renewal-loss-item-math">
+                            Add an annual contract value to estimate renegotiation savings.
+                          </p>
+                        )}
                       </div>
                       <Link className="attention-item-action" to={vendorContractsUrl(item.vendorId)}>
                         Review

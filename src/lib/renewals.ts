@@ -1,8 +1,19 @@
-import type { Contract, ContractRenewalType, RenewalUrgency } from "../types";
+import type { Contract, ContractRenewalType, RenewalItem, RenewalUrgency, Vendor } from "../types";
 
-/** Show contracts ending within this many days (and recently expired). */
+/** Show upcoming contracts ending within this many days. */
 export const RENEWAL_LOOKAHEAD_DAYS = 90;
+/**
+ * Kept for email digests / copy that reference a "recently expired" window.
+ * Open renewals keep *all* unhandled overdue contracts visible until marked handled —
+ * backfilled expired contracts must not fall off the radar after 30 days.
+ */
 export const RENEWAL_RECENT_EXPIRED_DAYS = 30;
+
+/** Whether an unhandled contract belongs on the open renewals list. */
+export function isInOpenRenewalsWindow(daysUntil: number): boolean {
+  if (daysUntil < 0) return true;
+  return daysUntil <= RENEWAL_LOOKAHEAD_DAYS;
+}
 
 /** User-facing labels for contract term dates (maps to start_date / end_date). */
 export const CONTRACT_START_LABEL = "Contract start";
@@ -76,16 +87,60 @@ export function computeSuggestedReviewDate(params: {
   return termEnd;
 }
 
-/** The date that drives renewals list, urgency, and email reminders. */
-export function getContractActionDate(contract: Pick<
+/** Normalize DB/extract timestamps to YYYY-MM-DD for reliable day math. */
+export function normalizeIsoDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+type ContractDateFields = Pick<
   Contract,
   "renewalType" | "endDate" | "renewalDate" | "noticePeriodDays"
->): string | null {
-  if (contract.renewalDate) return contract.renewalDate;
-  if (contract.renewalType === "auto_renew" && contract.endDate && contract.noticePeriodDays) {
-    return subtractDaysFromIsoDate(contract.endDate, contract.noticePeriodDays);
+> &
+  Partial<Pick<Contract, "startDate" | "termMonths" | "status">>;
+
+/** Term end date, including start + term length when end_date was left blank. */
+export function resolveContractEndDate(contract: Partial<Pick<Contract, "endDate" | "startDate" | "termMonths">>): string | null {
+  const endDate = normalizeIsoDate(contract.endDate ?? null);
+  if (endDate) return endDate;
+  const startDate = normalizeIsoDate(contract.startDate ?? null);
+  if (startDate && contract.termMonths && contract.termMonths > 0) {
+    return addMonthsToIsoDate(startDate, contract.termMonths);
   }
-  return contract.endDate;
+  return null;
+}
+
+/**
+ * The date that drives renewals list, urgency, and email reminders.
+ * Fixed-term contracts use term end — never a leftover review date from PDF extract/import.
+ */
+export function getContractActionDate(contract: ContractDateFields): string | null {
+  const renewalDate = normalizeIsoDate(contract.renewalDate);
+  const endDate = resolveContractEndDate(contract);
+
+  if (contract.renewalType === "fixed_term") {
+    return endDate ?? renewalDate;
+  }
+
+  if (renewalDate) return renewalDate;
+  if (contract.renewalType === "auto_renew" && endDate && contract.noticePeriodDays) {
+    return subtractDaysFromIsoDate(endDate, contract.noticePeriodDays);
+  }
+  return endDate;
+}
+
+/**
+ * Urgency date for open renewals / needs-attention / savings.
+ * Uses the earlier of action date and term end so a future "review by" cannot hide a 2022 expiry.
+ */
+export function getContractUrgencyDate(contract: ContractDateFields): string | null {
+  const actionDate = getContractActionDate(contract);
+  const endDate = resolveContractEndDate(contract);
+  if (actionDate && endDate) return actionDate <= endDate ? actionDate : endDate;
+  return actionDate ?? endDate;
 }
 
 export function getContractDateLabel(renewalType: ContractRenewalType): string {
@@ -94,16 +149,103 @@ export function getContractDateLabel(renewalType: ContractRenewalType): string {
 }
 
 export function daysUntilEnd(endDate: string) {
-  const end = new Date(`${endDate}T00:00:00`);
+  const normalized = normalizeIsoDate(endDate) ?? endDate.slice(0, 10);
+  const end = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return Number.NaN;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** True when an unhandled contract should appear as overdue (status or past urgency date). */
+export function isContractOverdue(contract: ContractDateFields & Partial<Pick<Contract, "renewalHandledAt">>): boolean {
+  if (contract.renewalHandledAt) return false;
+  if (contract.status === "inactive") return false;
+  if (contract.status === "expired") return true;
+  const urgencyDate = getContractUrgencyDate(contract);
+  if (!urgencyDate) return false;
+  const days = daysUntilEnd(urgencyDate);
+  return Number.isFinite(days) && days < 0;
 }
 
 export function getRenewalUrgency(daysUntil: number): RenewalUrgency {
   if (daysUntil < 0) return "overdue";
   if (daysUntil <= 30) return "soon";
   return "upcoming";
+}
+
+/**
+ * Build a RenewalItem from the same vendor+contract objects the Contracts tab uses.
+ * This is the source of truth for the open Renewals list so Expired contracts cannot
+ * disappear behind a separate API/join filter.
+ */
+export function contractToRenewalItem(
+  contract: Contract,
+  vendor: Pick<Vendor, "id" | "name">,
+): RenewalItem | null {
+  if (contract.status === "inactive") return null;
+
+  const overdue = isContractOverdue(contract);
+  const urgencyDate = getContractUrgencyDate(contract);
+  let effectiveDate =
+    urgencyDate ??
+    normalizeIsoDate(contract.endDate) ??
+    normalizeIsoDate(contract.renewalDate) ??
+    normalizeIsoDate(contract.startDate) ??
+    null;
+
+  // Status-expired / overdue rows with no parseable dates still belong on the open list.
+  if (!effectiveDate) {
+    if (!overdue && contract.status !== "expired") return null;
+    effectiveDate = "1970-01-01";
+  }
+
+  const days = daysUntilEnd(effectiveDate);
+  const daysForWindow = Number.isFinite(days) ? days : -9999;
+  const urgency: RenewalUrgency =
+    overdue || contract.status === "expired" || daysForWindow < 0
+      ? "overdue"
+      : getRenewalUrgency(daysForWindow);
+
+  // Keep every unhandled overdue/expired contract, even if a future review date
+  // would otherwise push daysUntil outside the 90-day lookahead.
+  if (!overdue && contract.status !== "expired" && !isInOpenRenewalsWindow(daysForWindow)) {
+    return null;
+  }
+
+  return {
+    contractId: contract.id,
+    contractName: contract.name,
+    vendorId: vendor.id,
+    vendorName: vendor.name,
+    actionDate: effectiveDate,
+    dateLabel: getContractDateLabel(contract.renewalType),
+    renewalType: contract.renewalType,
+    endDate: effectiveDate,
+    value: Number.isFinite(Number(contract.value)) ? Number(contract.value) : 0,
+    status: contract.status,
+    daysUntilEnd: daysForWindow,
+    urgency,
+    renewalHandledAt: contract.renewalHandledAt ?? null,
+    renewalHandledNote: contract.renewalHandledNote ?? null,
+    fileUrl: contract.file?.fileUrl,
+    fileName: contract.file?.fileName,
+    fileSize: contract.file?.fileSize,
+  };
+}
+
+/** Unhandled renewals derived from workspace vendors (aligns with Contracts "Expired" badges). */
+export function buildOpenRenewalsFromVendors(vendors: Vendor[]): RenewalItem[] {
+  const items: RenewalItem[] = [];
+  for (const vendor of vendors) {
+    if (vendor.status === "inactive") continue;
+    for (const contract of vendor.contracts) {
+      if (contract.renewalHandledAt) continue;
+      const item = contractToRenewalItem(contract, vendor);
+      if (item) items.push(item);
+    }
+  }
+  return items.sort((a, b) => a.daysUntilEnd - b.daysUntilEnd || a.actionDate.localeCompare(b.actionDate));
 }
 
 export function formatDaysUntil(daysUntil: number, renewalType: ContractRenewalType = "fixed_term") {
