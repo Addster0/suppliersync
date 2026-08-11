@@ -172,7 +172,7 @@ export function VendorContactEmailPanel({
     <div className="vendor-email-panel">
       <div className="section-header vendor-email-panel__head">
         <h3>Relationship emails</h3>
-        <p className="muted">Send from SupplierSync and keep a history on this vendor.</p>
+        <p className="muted">Send as your clinic via SupplierSync and keep a history on this vendor.</p>
       </div>
 
       {showSetup && (
@@ -257,7 +257,8 @@ export function VendorContactEmailPanel({
             </button>
           </div>
           <p className="muted vendor-email-compose__hint">
-            Replies go to your signed-in email. Sent from{" "}
+            Vendors see your clinic name via SupplierSync. Replies and a CC copy go to your
+            signed-in email. Delivered from{" "}
             {status?.fromEmail ?? "your configured SupplierSync sender"}.
           </p>
         </form>

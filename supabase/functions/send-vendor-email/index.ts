@@ -56,6 +56,19 @@ function resolveFromEmail() {
   );
 }
 
+/** Keep the configured mailbox; only rewrite the display name for clinic identity. */
+function extractFromAddress(fromEmail: string) {
+  const match = fromEmail.match(/<([^>]+)>/);
+  return (match?.[1] ?? fromEmail).trim();
+}
+
+function formatFromWithOrgDisplay(fromEmail: string, organizationName: string) {
+  const address = extractFromAddress(fromEmail);
+  const org = organizationName.replace(/[\r\n<>"]/g, "").trim() || "Clinic";
+  const display = `${org} via SupplierSync`;
+  return `${display} <${address}>`;
+}
+
 function notConfiguredMessage() {
   return (
     "Add RESEND_API_KEY to Supabase edge function secrets to enable relationship email. " +
@@ -63,7 +76,35 @@ function notConfiguredMessage() {
   );
 }
 
-function plainTextToHtml(body: string) {
+type SenderIdentity = {
+  fullName: string;
+  role: string;
+  organizationName: string;
+  phone: string;
+  email: string;
+};
+
+function buildSignatureLines(identity: SenderIdentity) {
+  const lines: string[] = [];
+  if (identity.fullName) lines.push(identity.fullName);
+  if (identity.role) lines.push(identity.role);
+  if (identity.organizationName) lines.push(identity.organizationName);
+  if (identity.phone) lines.push(identity.phone);
+  if (identity.email) lines.push(identity.email);
+  return lines;
+}
+
+function appendPlainTextSignature(body: string, identity: SenderIdentity) {
+  const lines = buildSignatureLines(identity);
+  if (lines.length === 0) return body;
+  return `${body.trimEnd()}\n\n--\n${lines.join("\n")}`;
+}
+
+function plainTextToHtml(body: string, organizationName?: string) {
+  const brandLabel = organizationName?.trim()
+    ? `${organizationName.trim()} via SupplierSync`
+    : "SupplierSync";
+
   const paragraphs = body
     .split(/\n{2,}/)
     .map((block) => block.trim())
@@ -75,7 +116,7 @@ function plainTextToHtml(body: string) {
 <html>
 <body style="margin:0;padding:0;background:#eef2f7;font-family:Inter,Segoe UI,sans-serif;">
   <div style="max-width:560px;margin:24px auto;padding:24px;background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 16px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">SupplierSync</p>
+    <p style="margin:0 0 16px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">${escapeHtml(brandLabel)}</p>
     ${paragraphs || `<p style="margin:0;color:#334155;font-size:15px;line-height:1.55;">${escapeHtml(body)}</p>`}
   </div>
 </body>
@@ -86,42 +127,31 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function htmlToPlainText(html: string) {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/h1>/gi, "\n\n")
-    .replace(/<\/h2>/gi, "\n\n")
-    .replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 async function sendViaResend(params: {
   resendKey: string;
   fromEmail: string;
   to: string;
   subject: string;
   html: string;
+  text: string;
   replyTo?: string;
+  cc?: string;
 }) {
   const payload: Record<string, unknown> = {
     from: params.fromEmail,
     to: [params.to],
     subject: params.subject,
     html: params.html,
-    text: htmlToPlainText(params.html),
+    text: params.text,
   };
 
   if (params.replyTo?.trim()) {
     payload.reply_to = params.replyTo.trim();
+  }
+
+  const cc = params.cc?.trim();
+  if (cc && isValidEmail(cc) && cc.toLowerCase() !== params.to.trim().toLowerCase()) {
+    payload.cc = [cc];
   }
 
   const response = await fetch("https://api.resend.com/emails", {
@@ -332,16 +362,65 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Vendor not found in this workspace." }, 404);
   }
 
-  const replyTo = user.email?.trim() || undefined;
+  const { data: organization, error: orgError } = await admin
+    .from("organizations")
+    .select("id, name")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (orgError) {
+    return jsonResponse({ error: orgError.message }, 500);
+  }
+  if (!organization) {
+    return jsonResponse({ error: "Workspace not found." }, 404);
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    return jsonResponse({ error: profileError.message }, 500);
+  }
+
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const metaRole =
+    (typeof meta.job_title === "string" && meta.job_title.trim()) ||
+    (typeof meta.title === "string" && meta.title.trim()) ||
+    (typeof meta.role === "string" && meta.role.trim()) ||
+    "";
+  const metaPhone =
+    (typeof meta.phone === "string" && meta.phone.trim()) ||
+    (typeof meta.phone_number === "string" && meta.phone_number.trim()) ||
+    "";
+
+  const senderEmail = (user.email?.trim() || profile?.email?.trim() || "").trim();
+  const identity: SenderIdentity = {
+    fullName: String(profile?.full_name ?? "").trim() ||
+      (typeof meta.full_name === "string" ? meta.full_name.trim() : ""),
+    role: metaRole,
+    organizationName: String(organization.name ?? "").trim(),
+    phone: metaPhone,
+    email: senderEmail,
+  };
+
+  const replyTo = senderEmail && isValidEmail(senderEmail) ? senderEmail : undefined;
+  const fromWithIdentity = formatFromWithOrgDisplay(fromEmail, identity.organizationName);
+  const signedBodyText = appendPlainTextSignature(bodyText, identity);
+  const html = plainTextToHtml(signedBodyText, identity.organizationName);
 
   try {
     const result = await sendViaResend({
       resendKey,
-      fromEmail,
+      fromEmail: fromWithIdentity,
       to: toEmail,
       subject,
-      html: plainTextToHtml(bodyText),
+      html,
+      text: signedBodyText,
       replyTo,
+      cc: replyTo,
     });
 
     const { data: row, error: insertError } = await admin
@@ -385,9 +464,11 @@ Deno.serve(async (req) => {
       toName: contact.name,
       vendorName: vendor.name,
       usingSandboxSender: isSandboxSender(fromEmail),
-      fromEmail,
+      fromEmail: fromWithIdentity,
       deliveryNote: emailDeliveryNote(fromEmail),
       replyTo: replyTo ?? null,
+      cc: replyTo ?? null,
+      organizationName: identity.organizationName,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to send email.";

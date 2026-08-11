@@ -35,6 +35,8 @@ export type SendVendorContactEmailResult = {
   fromEmail?: string;
   deliveryNote?: string;
   replyTo?: string | null;
+  cc?: string | null;
+  organizationName?: string;
   warning?: string;
   error?: string;
   configured?: boolean;
