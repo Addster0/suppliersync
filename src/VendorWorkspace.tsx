@@ -368,6 +368,7 @@ export function VendorWorkspace() {
   const [loadingVendors, setLoadingVendors] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
+  const [editingVendorIdentity, setEditingVendorIdentity] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("contacts");
   const [bannerMessage, setBannerMessage] = useState("");
   const [seeding, setSeeding] = useState(false);
@@ -582,6 +583,10 @@ export function VendorWorkspace() {
     const node = vendorButtonRefs.current.get(selectedVendorId);
     node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedVendorId, visibleVendors.length]);
+
+  useEffect(() => {
+    setEditingVendorIdentity(false);
+  }, [selectedVendorId]);
 
   useEffect(() => {
     if (!bannerMessage) return;
@@ -912,15 +917,45 @@ export function VendorWorkspace() {
         ) : (
           <>
             <header className="topbar">
-              <div>
+              <div className="vendor-detail-heading">
                 <p className="eyebrow">Vendor Detail</p>
-                <h2>{selectedVendor.name}</h2>
-                <p className="muted">
-                  {selectedVendor.category}
-                  {isSampleVendor(selectedVendor) && (
-                    <span className="vendor-sample-badge vendor-sample-badge--inline">Sample data</span>
-                  )}
-                </p>
+                {editingVendorIdentity && !readOnly ? (
+                  <div className="card vendor-identity-edit-panel">
+                    <VendorIdentityFields
+                      autoFocus
+                      category={selectedVendor.category}
+                      name={selectedVendor.name}
+                      onCancel={() => setEditingVendorIdentity(false)}
+                      onSaved={async () => {
+                        await reloadVendors();
+                        setEditingVendorIdentity(false);
+                      }}
+                      readOnly={readOnly}
+                      vendorId={selectedVendor.id}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="vendor-detail-title-row">
+                      <h2>{selectedVendor.name}</h2>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setEditingVendorIdentity(true)}
+                        >
+                          Edit vendor
+                        </button>
+                      )}
+                    </div>
+                    <p className="muted">
+                      {selectedVendor.category}
+                      {isSampleVendor(selectedVendor) && (
+                        <span className="vendor-sample-badge vendor-sample-badge--inline">Sample data</span>
+                      )}
+                    </p>
+                  </>
+                )}
               </div>
               <div className="right-actions">
                 <button
@@ -942,15 +977,6 @@ export function VendorWorkspace() {
             </header>
 
             <section className="info-grid">
-              <div className="card wide">
-                <VendorIdentityFields
-                  category={selectedVendor.category}
-                  name={selectedVendor.name}
-                  onSaved={reloadVendors}
-                  readOnly={readOnly}
-                  vendorId={selectedVendor.id}
-                />
-              </div>
               <div className="card">
                 <p className="label">Status</p>
                 <select
