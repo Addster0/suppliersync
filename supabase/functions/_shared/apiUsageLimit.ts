@@ -28,7 +28,11 @@ export async function checkAndLogExtractUsage(
 ): Promise<{ allowed: true } | { allowed: false; message: string; status: number }> {
   const admin = getAdminClient();
   if (!admin) {
-    return { allowed: true };
+    return {
+      allowed: false,
+      message: "Rate limiting is unavailable. Try again later.",
+      status: 503,
+    };
   }
 
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -42,7 +46,11 @@ export async function checkAndLogExtractUsage(
 
   if (countError) {
     if (isRateLimitSchemaError(countError.message)) {
-      return { allowed: true };
+      return {
+        allowed: false,
+        message: "Rate limiting is unavailable. Try again later.",
+        status: 503,
+      };
     }
     return { allowed: false, message: countError.message, status: 500 };
   }
@@ -63,7 +71,11 @@ export async function checkAndLogExtractUsage(
 
   if (insertError) {
     if (isRateLimitSchemaError(insertError.message)) {
-      return { allowed: true };
+      return {
+        allowed: false,
+        message: "Rate limiting is unavailable. Try again later.",
+        status: 503,
+      };
     }
     return { allowed: false, message: insertError.message, status: 500 };
   }

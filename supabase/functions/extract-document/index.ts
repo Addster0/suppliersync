@@ -324,30 +324,15 @@ async function extractWithOpenAI(params: {
 }
 
 async function requireOrgMember(req: Request, organizationId: string) {
+  const auth = await requireAuthenticatedUser(req, corsHeaders, jsonResponse);
+  if ("error" in auth && auth.error) {
+    return { error: auth.error };
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
-  if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+  if (!supabaseUrl || !serviceRoleKey) {
     return { error: jsonResponse({ error: "Supabase environment is not configured." }, 500) };
-  }
-
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return { error: jsonResponse({ error: "Unauthorized." }, 401) };
-  }
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const {
-    data: { user },
-    error: userError,
-  } = await userClient.auth.getUser();
-
-  if (userError || !user) {
-    return { error: jsonResponse({ error: "Unauthorized." }, 401) };
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -355,7 +340,7 @@ async function requireOrgMember(req: Request, organizationId: string) {
     .from("organization_members")
     .select("role")
     .eq("organization_id", organizationId)
-    .eq("user_id", user.id)
+    .eq("user_id", auth.user.id)
     .maybeSingle();
 
   if (membershipError) {
@@ -366,7 +351,7 @@ async function requireOrgMember(req: Request, organizationId: string) {
     return { error: jsonResponse({ error: "You do not have access to this workspace." }, 403) };
   }
 
-  return { user, userClient };
+  return { user: auth.user };
 }
 
 Deno.serve(async (req) => {
