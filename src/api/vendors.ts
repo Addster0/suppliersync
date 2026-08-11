@@ -500,6 +500,35 @@ export async function addContact(organizationId: string, vendorId: string, conta
   if (error) throw new Error(error.message);
 }
 
+export async function updateContact(
+  contactId: string,
+  contact: Omit<Contact, "id">
+): Promise<Contact> {
+  const { data, error } = await requireSupabase()
+    .from("contacts")
+    .update({
+      name: contact.name,
+      role: contact.role,
+      email: contact.email,
+      phone: contact.phone,
+    })
+    .eq("id", contactId)
+    .select("id, name, role, email, phone")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Could not update contact.");
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    role: data.role,
+    email: data.email,
+    phone: data.phone,
+  };
+}
+
 export async function deleteContact(contactId: string) {
   const { error } = await requireSupabase().from("contacts").delete().eq("id", contactId);
   if (error) throw new Error(error.message);

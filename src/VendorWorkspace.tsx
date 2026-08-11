@@ -28,6 +28,7 @@ import {
   fetchVendors,
   rollbackOrgUpload,
   seedSampleVendors,
+  updateContact,
   updateContract,
   updateVendorCore,
   uploadAndAddDocument,
@@ -116,6 +117,7 @@ import { enrichContractExtractResult, missingRequiredContractFields } from "./li
 import { getSupabaseEdgeSecretsUrl, getSupabaseSqlEditorUrl } from "./lib/storage";
 import { getMedianContractValue } from "./lib/renewalLossCalculator";
 import type {
+  Contact,
   Contract,
   ContractRenewalType,
   DocumentDocType,
@@ -1058,6 +1060,33 @@ export function VendorWorkspace() {
   );
 }
 
+function isValidContactEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function normalizeContactFields(input: {
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+}): Omit<Contact, "id"> | string {
+  const name = input.name.trim();
+  const role = input.role.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+
+  if (!name) return "Name is required.";
+  if (!email && !phone) return "Add an email or phone number.";
+  if (email && !isValidContactEmail(email)) return "Enter a valid email address.";
+
+  return { name, role, email, phone };
+}
+
+function formatContactLine(contact: Contact) {
+  const parts = [contact.email.trim() || null, contact.phone.trim() || null].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "No email or phone yet";
+}
+
 function ContactsSection({
   vendor,
   organizationId,
@@ -1071,53 +1100,176 @@ function ContactsSection({
   isPlatformAdmin: boolean;
   onChanged: () => Promise<void>;
 }) {
+  const [addError, setAddError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Omit<Contact, "id"> | null>(null);
+  const [editError, setEditError] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  function startEditContact(contact: Contact) {
+    setEditingContactId(contact.id);
+    setEditDraft({
+      name: contact.name,
+      role: contact.role,
+      email: contact.email,
+      phone: contact.phone,
+    });
+    setEditError("");
+  }
+
+  function cancelEditContact() {
+    setEditingContactId(null);
+    setEditDraft(null);
+    setEditError("");
+  }
+
   async function handleAddContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (readOnly) return;
+    setAddError("");
     const form = new FormData(event.currentTarget);
-    const contact = {
+    const parsed = normalizeContactFields({
       name: String(form.get("name") || ""),
       role: String(form.get("role") || ""),
       email: String(form.get("email") || ""),
       phone: String(form.get("phone") || ""),
-    };
-    if (!contact.name || !contact.role || !contact.email || !contact.phone) return;
-    await addContact(organizationId, vendor.id, contact);
-    await onChanged();
-    event.currentTarget.reset();
+    });
+    if (typeof parsed === "string") {
+      setAddError(parsed);
+      return;
+    }
+
+    setAdding(true);
+    try {
+      await addContact(organizationId, vendor.id, parsed);
+      await onChanged();
+      event.currentTarget.reset();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "Could not add contact.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleSaveContactEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (readOnly || !editDraft || !editingContactId) return;
+    setEditError("");
+
+    const parsed = normalizeContactFields(editDraft);
+    if (typeof parsed === "string") {
+      setEditError(parsed);
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      await updateContact(editingContactId, parsed);
+      cancelEditContact();
+      await onChanged();
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Could not update contact.");
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   return (
     <>
       <Section title="Contacts" empty={!vendor.contacts.length} emptyText="No contacts added yet.">
         {!readOnly && (
-          <FormGrid onSubmit={handleAddContact} submitText="Add Contact">
-            <input name="name" placeholder="Name" />
-            <input name="role" placeholder="Role" />
-            <input name="email" placeholder="Email" type="email" />
-            <input name="phone" placeholder="Phone" />
-          </FormGrid>
+          <>
+            <FormGrid onSubmit={handleAddContact} submitText={adding ? "Adding…" : "Add Contact"} disabled={adding}>
+              <input name="name" placeholder="Name" required />
+              <input name="role" placeholder="Role (optional)" />
+              <input name="email" placeholder="Email (optional)" type="email" />
+              <input name="phone" placeholder="Phone (optional)" />
+            </FormGrid>
+            {addError && <p className="form-error">{addError}</p>}
+            <p className="muted small">Name plus an email or phone is enough — you can add the other later.</p>
+          </>
         )}
 
-        {vendor.contacts.map((contact) => (
-          <div className="card row" key={contact.id}>
-            <div>
-              <strong>{contact.name}</strong>
-              <p className="muted">{contact.role}</p>
-              <p className="muted">
-                {contact.email} · {contact.phone}
-              </p>
+        {vendor.contacts.map((contact) => {
+          if (editingContactId === contact.id && editDraft) {
+            return (
+              <form
+                key={contact.id}
+                className="form-grid card contract-edit-form"
+                onSubmit={(event) => void handleSaveContactEdit(event)}
+              >
+                <p className="muted small contract-edit-form__title">
+                  Editing <strong>{contact.name}</strong>
+                </p>
+                <input
+                  name="name"
+                  placeholder="Name"
+                  required
+                  value={editDraft.name}
+                  onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })}
+                />
+                <input
+                  name="role"
+                  placeholder="Role (optional)"
+                  value={editDraft.role}
+                  onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })}
+                />
+                <input
+                  name="email"
+                  placeholder="Email (optional)"
+                  type="email"
+                  value={editDraft.email}
+                  onChange={(event) => setEditDraft({ ...editDraft, email: event.target.value })}
+                />
+                <input
+                  name="phone"
+                  placeholder="Phone (optional)"
+                  value={editDraft.phone}
+                  onChange={(event) => setEditDraft({ ...editDraft, phone: event.target.value })}
+                />
+                {editError && <p className="form-error">{editError}</p>}
+                <div className="contract-edit-form__actions">
+                  <button type="submit" disabled={editSaving}>
+                    {editSaving ? "Saving…" : "Save changes"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={editSaving}
+                    onClick={cancelEditContact}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            );
+          }
+
+          return (
+            <div className="card row" key={contact.id}>
+              <div>
+                <strong>{contact.name}</strong>
+                {contact.role.trim() ? <p className="muted">{contact.role}</p> : null}
+                <p className="muted">{formatContactLine(contact)}</p>
+              </div>
+              {!readOnly && (
+                <div className="right-actions">
+                  <button type="button" className="secondary" onClick={() => startEditContact(contact)}>
+                    Edit
+                  </button>
+                  <DeleteButton
+                    onClick={async () => {
+                      if (editingContactId === contact.id) cancelEditContact();
+                      await deleteContact(contact.id);
+                      await onChanged();
+                    }}
+                  />
+                </div>
+              )}
             </div>
-            {!readOnly && (
-              <DeleteButton
-                onClick={async () => {
-                  await deleteContact(contact.id);
-                  await onChanged();
-                }}
-              />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </Section>
 
       <VendorContactEmailPanel
