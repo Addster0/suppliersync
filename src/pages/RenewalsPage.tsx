@@ -149,7 +149,20 @@ export function RenewalsPage() {
   const [renewalNotificationEmail, setRenewalNotificationEmail] = useState<string | null>(null);
   const [loadingNotificationEmail, setLoadingNotificationEmail] = useState(true);
 
-  const testRecipientEmail = renewalNotificationEmail?.trim() || user?.email || null;
+  const loginEmail = user?.email?.trim() || null;
+  const overrideEmail = renewalNotificationEmail?.trim() || null;
+  const testRecipientEmails = Array.from(
+    new Set(
+      [loginEmail, overrideEmail].filter((email): email is string => Boolean(email)).map((email) => email)
+    )
+  );
+  const testRecipientEmail = testRecipientEmails[0] ?? null;
+  const testRecipientLabel =
+    testRecipientEmails.length === 0
+      ? null
+      : testRecipientEmails.length === 1
+        ? testRecipientEmails[0]
+        : `${testRecipientEmails.join(" and ")}`;
 
   useEffect(() => {
     const userId = user?.id;
@@ -385,8 +398,17 @@ export function RenewalsPage() {
     try {
       const result = await sendRenewalReminderTest(organizationId);
       const count = result.contractCount ?? 0;
-      const recipient = result.recipient ?? testRecipientEmail ?? "your inbox";
-      let message = `Test email sent to ${recipient}${count ? ` with ${count} contract${count === 1 ? "" : "s"}.` : "."}`;
+      const recipients =
+        (result.recipients && result.recipients.length > 0
+          ? result.recipients
+          : result.recipient
+            ? [result.recipient]
+            : testRecipientEmails) ?? [];
+      const recipientLabel = recipients.length > 0 ? recipients.join(" and ") : testRecipientLabel ?? "your inbox";
+      let message = `Test email sent to ${recipientLabel}${count ? ` with ${count} contract${count === 1 ? "" : "s"}.` : "."}`;
+      if (result.fromEmail) {
+        message += ` From: ${result.fromEmail}.`;
+      }
       if (result.deliveryNote) {
         message += ` ${result.deliveryNote}`;
       } else if (result.usingSandboxSender) {
@@ -413,7 +435,7 @@ export function RenewalsPage() {
               <h1>Vendor contract deadlines</h1>
               <p className="muted">
                 Track renewal and review dates before auto-renewals or missed notice windows. Owners and admins get
-                email digests at 90, 30, and 7 days out, plus on the due date.
+                email reminders at 90, 30, and 7 days out, on the due date, and once when a contract is overdue.
               </p>
             </div>
             <div className="right-actions">
@@ -502,10 +524,10 @@ export function RenewalsPage() {
                 <p className="muted small renewals-email-note">
                   {loadingNotificationEmail ? (
                     "Loading notification address…"
-                  ) : testRecipientEmail ? (
+                  ) : testRecipientLabel ? (
                     <>
-                      Reminders for you go to <strong>{testRecipientEmail}</strong>
-                      {renewalNotificationEmail?.trim() ? " (override)" : " (login email)"}.
+                      Reminders for you go to <strong>{testRecipientLabel}</strong>
+                      {overrideEmail ? " (login + Account extra inbox)" : " (login email)"}.
                       {" "}
                       <Link to="/app/account">Change in Account</Link>
                     </>

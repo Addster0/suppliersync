@@ -16,7 +16,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-type ReminderWindow = "90_days" | "30_days" | "7_days" | "due_today";
+type ReminderWindow = "90_days" | "30_days" | "7_days" | "due_today" | "overdue";
 
 const REMINDER_WINDOWS: { key: ReminderWindow; offsetDays: number; label: string }[] = [
   { key: "90_days", offsetDays: 90, label: "90 days out" },
@@ -90,10 +90,14 @@ function subtractDaysFromIsoDate(isoDate: string, days: number): string {
   return formatDateForQuery(date);
 }
 
+/** Keep in sync with src/lib/renewals.ts — fixed-term prefers term end. */
 function getContractActionDate(row: Pick<
   ContractRow,
   "renewal_type" | "end_date" | "renewal_date" | "notice_period_days"
 >): string | null {
+  if (row.renewal_type === "fixed_term") {
+    return row.end_date ?? row.renewal_date;
+  }
   if (row.renewal_date) return row.renewal_date;
   if (row.renewal_type === "auto_renew" && row.end_date && row.notice_period_days) {
     return subtractDaysFromIsoDate(row.end_date, row.notice_period_days);
@@ -155,7 +159,7 @@ function buildEmailHtml(params: {
 <html>
 <body style="margin:0;padding:0;background:#eef2f7;font-family:Inter,Segoe UI,sans-serif;">
   <div style="max-width:560px;margin:24px auto;padding:24px;background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">SupplierSync</p>
+    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">${escapeHtml(orgName)} via SupplierSync</p>
     <h1 style="margin:0 0 12px;font-size:22px;color:#172033;">Contract renewals for ${escapeHtml(orgName)}</h1>
     ${testBanner}
     <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.5;">
@@ -168,7 +172,7 @@ function buildEmailHtml(params: {
       </a>
     </p>
     <p style="margin:20px 0 0;color:#94a3b8;font-size:12px;line-height:1.5;">
-      Workspace owners and admins receive these reminders at 90, 30, and 7 days before end date, and on the due date.
+      Workspace owners and admins receive these reminders at 90, 30, and 7 days before the action date, on the due date, and once when a contract becomes overdue.
     </p>
   </div>
 </body>
@@ -211,6 +215,18 @@ function resolveReplyTo(fromEmail: string) {
   const addr = (match?.[1] ?? fromEmail).trim();
   if (!addr.includes("@") || addr.includes("resend.dev")) return undefined;
   return addr;
+}
+
+function extractFromAddress(fromEmail: string) {
+  const match = fromEmail.match(/<([^>]+)>/);
+  return (match?.[1] ?? fromEmail).trim();
+}
+
+/** Match vendor outreach identity — practice-branded From helps corporate filters (e.g. hinet). */
+function formatFromWithOrgDisplay(fromEmail: string, organizationName: string) {
+  const address = extractFromAddress(fromEmail);
+  const org = organizationName.replace(/[\r\n<>"]/g, "").trim() || "Clinic";
+  return `${org} via SupplierSync <${address}>`;
 }
 
 async function sendEmail(params: {
@@ -292,13 +308,27 @@ function emailDeliveryNote(fromEmail: string) {
   return "Production sender configured — reminders can deliver to workspace owners and admins.";
 }
 
-function resolveNotificationEmail(
-  renewalNotificationEmail: string | null | undefined,
-  authEmail: string | null | undefined
+/**
+ * Always deliver to the login (auth) email. Optional Account override is an *additional*
+ * inbox — never a replacement — so clinic addresses like *@hinet.org keep getting mail.
+ */
+function resolveRecipientEmails(
+  authEmail: string | null | undefined,
+  renewalNotificationEmail: string | null | undefined
 ) {
-  const override = renewalNotificationEmail?.trim();
-  if (override) return override;
-  return authEmail?.trim() ?? "";
+  const emails: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of [authEmail, renewalNotificationEmail]) {
+    const email = raw?.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    emails.push(email);
+  }
+
+  return emails;
 }
 
 async function getProfileNotificationEmail(
@@ -332,61 +362,63 @@ async function getAdminEmails(
 
   const { data: profiles, error: profileError } = await admin
     .from("profiles")
-    .select("id, renewal_notification_email")
+    .select("id, email, renewal_notification_email")
     .in("id", userIds);
 
   if (profileError) throw new Error(profileError.message);
 
   const profileMap = new Map(
-    (profiles ?? []).map((row) => [row.id, row.renewal_notification_email as string | null])
+    (profiles ?? []).map((row) => [
+      row.id,
+      {
+        profileEmail: row.email as string | null,
+        override: row.renewal_notification_email as string | null,
+      },
+    ])
   );
 
   const emails: string[] = [];
 
   for (const userId of userIds) {
-    const override = profileMap.get(userId);
-    if (override?.trim()) {
-      emails.push(override.trim());
-      continue;
-    }
-
+    const profile = profileMap.get(userId);
     const { data: authData, error: authError } = await admin.auth.admin.getUserById(userId);
     const authEmail = !authError ? authData.user?.email : null;
-    const resolved = resolveNotificationEmail(null, authEmail);
-    if (resolved) emails.push(resolved);
+    const resolved = resolveRecipientEmails(
+      authEmail ?? profile?.profileEmail,
+      profile?.override
+    );
+    emails.push(...resolved);
   }
 
-  return [...new Set(emails)];
+  return [...new Set(emails.map((email) => email.toLowerCase()))].map((lower) => {
+    const original = emails.find((email) => email.toLowerCase() === lower);
+    return original ?? lower;
+  });
 }
 
 async function fetchContractsForTest(admin: ReturnType<typeof createClient>, organizationId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const rangeStart = new Date(today);
-  rangeStart.setDate(rangeStart.getDate() - 30);
-
   const rangeEnd = new Date(today);
   rangeEnd.setDate(rangeEnd.getDate() + 90);
-
-  const startIso = formatDateForQuery(rangeStart);
   const endIso = formatDateForQuery(rangeEnd);
 
+  // Include overdue + upcoming (no lower bound) so onboarded clinics with past-due
+  // contracts get a meaningful test — matching the Renewals dashboard radar.
   const { data, error } = await admin
     .from("contracts")
     .select(CONTRACT_SELECT)
     .eq("organization_id", organizationId)
     .is("renewal_handled_at", null)
-    .or(
-      `and(end_date.gte.${startIso},end_date.lte.${endIso}),and(renewal_date.gte.${startIso},renewal_date.lte.${endIso})`
-    )
+    .or(`end_date.lte.${endIso},renewal_date.lte.${endIso}`)
     .order("end_date", { ascending: true, nullsFirst: false });
 
   if (error) throw new Error(error.message);
 
   return (data ?? []).filter((row) => {
     const actionDate = getContractActionDate(row as ContractRow);
-    return actionDate && actionDate >= startIso && actionDate <= endIso;
+    return actionDate !== null && actionDate <= endIso;
   }) as ContractRow[];
 }
 
@@ -439,6 +471,61 @@ async function fetchContractsForWindow(
         window,
         windowLabel: windowMeta.label,
         daysUntilEnd: daysUntilEnd(getContractActionDate(row)!),
+      },
+    ];
+  });
+}
+
+/** One-shot overdue notice for unhandled past-due contracts (e.g. onboarded historical terms). */
+async function fetchOverdueContracts(
+  admin: ReturnType<typeof createClient>,
+  organizationId: string,
+  todayIso: string
+) {
+  const { data, error } = await admin
+    .from("contracts")
+    .select(CONTRACT_SELECT)
+    .eq("organization_id", organizationId)
+    .is("renewal_handled_at", null)
+    .or(`end_date.lt.${todayIso},renewal_date.lt.${todayIso}`);
+
+  if (error) throw new Error(error.message);
+
+  const contracts = ((data ?? []) as ContractRow[]).filter((row) => {
+    const actionDate = getContractActionDate(row);
+    return actionDate !== null && actionDate < todayIso;
+  });
+  if (contracts.length === 0) return [] as ReminderLine[];
+
+  const contractIds = contracts.map((row) => row.id);
+  const { data: logs, error: logError } = await admin
+    .from("renewal_reminder_log")
+    .select("contract_id")
+    .eq("organization_id", organizationId)
+    .eq("reminder_window", "overdue")
+    .in("contract_id", contractIds);
+
+  if (logError) throw new Error(logError.message);
+
+  const sentIds = new Set((logs ?? []).map((row) => row.contract_id));
+
+  return contracts.flatMap((row) => {
+    if (sentIds.has(row.id)) return [];
+    const vendorName = vendorNameFromRow(row.vendors);
+    if (!vendorName) return [];
+    const actionDate = getContractActionDate(row)!;
+
+    return [
+      {
+        contractId: row.id,
+        contractName: row.title,
+        vendorName,
+        vendorId: row.vendor_id,
+        endDate: actionDate,
+        value: Number(row.value),
+        window: "overdue" as const,
+        windowLabel: "overdue",
+        daysUntilEnd: daysUntilEnd(actionDate),
       },
     ];
   });
@@ -540,8 +627,8 @@ Deno.serve(async (req) => {
       }
 
       const profileOverride = await getProfileNotificationEmail(admin, user.id);
-      const recipientEmail = resolveNotificationEmail(profileOverride, user.email);
-      if (!recipientEmail) {
+      const recipients = resolveRecipientEmails(user.email, profileOverride);
+      if (recipients.length === 0) {
         return jsonResponse({ error: "Could not find your email address." }, 400);
       }
 
@@ -555,7 +642,15 @@ Deno.serve(async (req) => {
 
         const days = daysUntilEnd(actionDate);
         const window: ReminderWindow =
-          days === 0 ? "due_today" : days === 7 ? "7_days" : days === 30 ? "30_days" : "90_days";
+          days < 0
+            ? "overdue"
+            : days === 0
+              ? "due_today"
+              : days === 7
+                ? "7_days"
+                : days === 30
+                  ? "30_days"
+                  : "90_days";
 
         return [
           {
@@ -572,6 +667,7 @@ Deno.serve(async (req) => {
         ];
       });
 
+      const fromWithIdentity = formatFromWithOrgDisplay(fromEmail, org.name);
       const html = buildEmailHtml({
         orgName: org.name,
         lines,
@@ -581,18 +677,20 @@ Deno.serve(async (req) => {
 
       const sendResult = await sendEmail({
         resendKey,
-        fromEmail,
-        to: [recipientEmail],
-        subject: `[Test] SupplierSync renewals — ${org.name}`,
+        fromEmail: fromWithIdentity,
+        to: recipients,
+        subject: `[Test] ${org.name} renewals via SupplierSync`,
         html,
         replyTo,
       });
 
       return jsonResponse({
         sent: true,
-        recipient: recipientEmail,
+        recipient: recipients[0],
+        recipients,
         contractCount: lines.length,
         usingSandboxSender: isSandboxSender(fromEmail),
+        fromEmail: fromWithIdentity,
         appUrl,
         resendEmailId: sendResult.id,
         deliveryNote: emailDeliveryNote(fromEmail),
@@ -631,11 +729,15 @@ Deno.serve(async (req) => {
           lines.push(...matches);
         }
 
+        const todayIso = formatDateForQuery(today);
+        lines.push(...(await fetchOverdueContracts(admin, org.id, todayIso)));
+
         if (lines.length === 0) continue;
 
         const recipients = await getAdminEmails(admin, org.id);
         if (recipients.length === 0) continue;
 
+        const fromWithIdentity = formatFromWithOrgDisplay(fromEmail, org.name);
         const html = buildEmailHtml({
           orgName: org.name,
           lines,
@@ -645,9 +747,9 @@ Deno.serve(async (req) => {
 
         await sendEmail({
           resendKey,
-          fromEmail,
+          fromEmail: fromWithIdentity,
           to: recipients,
-          subject: `SupplierSync renewals — ${org.name}`,
+          subject: `${org.name} renewals via SupplierSync`,
           html,
           replyTo,
         });
@@ -818,8 +920,8 @@ Deno.serve(async (req) => {
       }
 
       const profileOverride = await getProfileNotificationEmail(admin, user.id);
-      const recipientEmail = resolveNotificationEmail(profileOverride, user.email);
-      if (!recipientEmail) {
+      const recipients = resolveRecipientEmails(user.email, profileOverride);
+      if (recipients.length === 0) {
         return jsonResponse({ error: "Could not find your email address." }, 400);
       }
 
@@ -831,22 +933,25 @@ Deno.serve(async (req) => {
       });
 
       const label = periodType === "monthly" ? "monthly report" : "annual report";
+      const fromWithIdentity = formatFromWithOrgDisplay(fromEmail, org.name);
       const sendResult = await sendEmail({
         resendKey,
-        fromEmail,
-        to: [recipientEmail],
-        subject: `[Test] SupplierSync ${label} — ${org.name}`,
+        fromEmail: fromWithIdentity,
+        to: recipients,
+        subject: `[Test] ${org.name} ${label} via SupplierSync`,
         html,
         replyTo,
       });
 
       return jsonResponse({
         sent: true,
-        recipient: recipientEmail,
+        recipient: recipients[0],
+        recipients,
         periodType,
         periodLabel: reportData.periodLabel,
         vendorCount: reportData.vendorCount,
         usingSandboxSender: isSandboxSender(fromEmail),
+        fromEmail: fromWithIdentity,
         appUrl,
         resendEmailId: sendResult.id,
         deliveryNote: emailDeliveryNote(fromEmail),
@@ -915,11 +1020,12 @@ Deno.serve(async (req) => {
         });
 
         const label = periodType === "monthly" ? "monthly report" : "annual report";
+        const fromWithIdentity = formatFromWithOrgDisplay(fromEmail, org.name);
         await sendEmail({
           resendKey,
-          fromEmail,
+          fromEmail: fromWithIdentity,
           to: recipients,
-          subject: `SupplierSync ${label} — ${org.name}`,
+          subject: `${org.name} ${label} via SupplierSync`,
           html,
           replyTo,
         });

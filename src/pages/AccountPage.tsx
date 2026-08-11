@@ -373,8 +373,8 @@ export function AccountPage() {
                       />
                     </label>
                     <p className="muted small">
-                      If your signup email doesn&apos;t receive our messages, enter a Gmail or work address here.
-                      Leave blank to use your login email ({user?.email ?? "—"}).
+                      Optional extra inbox for renewal reminders (in addition to your login email
+                      {user?.email ? ` ${user.email}` : ""}). Leave blank to use only your login address.
                     </p>
                     <button type="submit" className="auth-submit" disabled={saving}>
                       {saving ? "Saving…" : "Save profile"}

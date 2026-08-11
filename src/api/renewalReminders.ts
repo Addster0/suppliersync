@@ -86,8 +86,10 @@ export async function sendRenewalReminderTest(organizationId: string) {
     error?: string;
     sent?: boolean;
     recipient?: string;
+    recipients?: string[];
     contractCount?: number;
     usingSandboxSender?: boolean;
+    fromEmail?: string;
     appUrl?: string;
     resendEmailId?: string | null;
     deliveryNote?: string;
