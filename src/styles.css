@@ -614,6 +614,34 @@ button:disabled:hover {
   margin-bottom: 22px;
 }
 
+.vendor-detail-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.vendor-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vendor-detail-title-row h2 {
+  margin: 0;
+}
+
+.vendor-identity-edit-panel {
+  margin-top: 8px;
+  max-width: 640px;
+}
+
+.vendor-identity-fields-head .label {
+  margin-bottom: 0;
+  color: #0f172a;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
 .badge, .mini-badge {
   display: inline-flex;
   align-items: center;
