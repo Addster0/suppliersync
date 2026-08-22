@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { BrandLogo } from "../components/BrandLogo";
+import { MarketingWordmark } from "../components/MarketingWordmark";
 import { LegalFooter } from "../components/LegalFooter";
 import { APP_NAME } from "../lib/brand";
 import {
@@ -45,7 +45,89 @@ const steps = [
   { n: "3", title: "Search and decide before renewals", body: "See what's expiring, what's on file, and what you're spending." },
 ];
 
-const trustItems = ["Secure workspaces", "Role-based access", "Real database search", "Built for 3–25 staff clinics"];
+const trustItems = [
+  { icon: "lock", label: "Secure workspaces" },
+  { icon: "shield-check", label: "Role-based access" },
+  { icon: "users", label: "Built for 3–25 staff clinics" },
+];
+
+const featureModules = [
+  {
+    id: "module-contracts",
+    flip: false,
+    eyebrow: "Contracts",
+    title: "Know what ends before it auto-renews",
+    body: "Lab, IT, and waste agreements usually live in different folders until the price goes up. SupplierSync keeps start dates, end dates, and values on the vendor record — so the 2026 lab agreement shows up 18 days out, not after it renews.",
+    linkLabel: "See how contracts are tracked",
+    href: "#features",
+    snippet: "contracts",
+  },
+  {
+    id: "module-compliance",
+    flip: true,
+    eyebrow: "Compliance documents",
+    title: "Find the BAA without opening five folders",
+    body: "BAAs, COIs, and W-9s hide in email until an audit or a new vendor asks. Keep them on the vendor they belong to, named and searchable, so insurance-baa-2026.pdf is one lookup instead of a scavenger hunt.",
+    linkLabel: "See how documents are filed",
+    href: "#features",
+    snippet: "compliance",
+  },
+  {
+    id: "module-spend",
+    flip: false,
+    eyebrow: "Spend",
+    title: "See vendor cost before it surprises you",
+    body: "This is not accounting software. It is a simple record of what each vendor costs so you can compare the $48,000 lab agreement to IT and waste before you renew — one list, not a reconstructed spreadsheet.",
+    linkLabel: "See how spend is recorded",
+    href: "#features",
+    snippet: "spend",
+  },
+  {
+    id: "module-renewals",
+    flip: true,
+    eyebrow: "Renewals",
+    title: "Never miss a renewal again",
+    body: "Auto-renew is how a quiet month becomes an expensive one. A single list shows what is due in 18 days versus later this year, with the contract value attached, so the office manager can act while there is still time.",
+    linkLabel: "See how renewals are listed",
+    href: "#how",
+    snippet: "renewals",
+  },
+] as const;
+
+const outcomes = [
+  { icon: "calendar", label: "Never miss a renewal" },
+  { icon: "spend", label: "See spend before it surprises you" },
+  { icon: "doc", label: "One place for every BAA" },
+  { icon: "search", label: "Find a vendor file in seconds" },
+  { icon: "users", label: "Built for 3–25 staff clinics" },
+];
+
+const faqs = [
+  {
+    q: "Does this replace our EHR?",
+    a: "No. SupplierSync sits beside your EHR. It is for vendors, contracts, compliance files, and spend — not charts, billing, or clinical workflows.",
+  },
+  {
+    q: "How do you handle BAAs and other vendor documents?",
+    a: "You upload the files your clinic already keeps — BAAs, COIs, and W-9s — onto the vendor record. Each clinic workspace is isolated. Use the same judgment you use with a shared drive: store vendor paperwork, not patient charts.",
+  },
+  {
+    q: "We only work with a handful of vendors. Is this still useful?",
+    a: "Yes. A 3–25 staff clinic often has fewer vendors than a hospital, but the same auto-renew and “where is that BAA” problem. A short list is easier to keep current.",
+  },
+  {
+    q: "How long does setup take?",
+    a: "Create a workspace, name the practice, and add the vendors you already use. Most clinics can enter their core vendors, contracts, and files in a single sitting — minutes to a first useful list, not a weeks-long implementation.",
+  },
+  {
+    q: "Who can see our vendor data?",
+    a: "Owners, admins, and staff you invite. Role-based access keeps the workspace to your clinic. Other clinics cannot see your records.",
+  },
+  {
+    q: "Is this accounting or procurement software?",
+    a: "Neither. It will not replace your bookkeeper or a hospital purchasing stack. It is a decision tool: what renews, what is on file, and what you are spending.",
+  },
+];
 
 function MarketingIcon({ name }: { name: string }) {
   const paths: Record<string, ReactNode> = {
@@ -138,6 +220,61 @@ function MarketingIcon({ name }: { name: string }) {
   );
 }
 
+function HeroTrustIcon({ name }: { name: string }) {
+  const paths: Record<string, ReactNode> = {
+    lock: (
+      <>
+        <path
+          d="M8 11V8a4 4 0 018 0v3"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path
+          d="M6 11h12v10H6V11z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinejoin="round"
+        />
+      </>
+    ),
+    "shield-check": (
+      <>
+        <path
+          d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinejoin="round"
+        />
+        <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      </>
+    ),
+    users: (
+      <>
+        <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <path
+          d="M3 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 010 5M19 19c0-2-1.5-3.5-3.5-3.5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </>
+    ),
+  };
+
+  return (
+    <span className="marketing-trust-icon" aria-hidden>
+      <svg viewBox="0 0 24 24" width="14" height="14">
+        {paths[name]}
+      </svg>
+    </span>
+  );
+}
+
 function AppMockup() {
   return (
     <div className="app-mockup" aria-hidden>
@@ -197,6 +334,118 @@ function AppMockup() {
   );
 }
 
+function ModuleSnippet({ kind }: { kind: (typeof featureModules)[number]["snippet"] }) {
+  const rows = {
+    contracts: {
+      bar: "Contracts · Regional Lab Services",
+      items: [
+        { title: "2026 Lab services agreement", meta: "Ends Mar 31 · $48,000", flag: "18 days" },
+        { title: "IT support agreement", meta: "Clinic IT Support · Ends Jun 15", flag: null },
+        { title: "Waste disposal agreement", meta: "Medical Waste Co. · Ends Aug 1", flag: null },
+      ],
+    },
+    compliance: {
+      bar: "Documents · Regional Lab Services",
+      items: [
+        { title: "insurance-baa-2026.pdf", meta: "BAA on file", flag: null },
+        { title: "coi-regional-lab.pdf", meta: "Certificate of insurance", flag: null },
+        { title: "w9-medical-waste.pdf", meta: "Medical Waste Co. · W-9", flag: null },
+      ],
+    },
+    spend: {
+      bar: "Spend · this workspace",
+      items: [
+        { title: "Regional Lab Services", meta: "Lab & diagnostics · $48,000", flag: null },
+        { title: "Clinic IT Support", meta: "IT services", flag: null },
+        { title: "Medical Waste Co.", meta: "Waste disposal", flag: null },
+      ],
+    },
+    renewals: {
+      bar: "Renewals · next 90 days",
+      items: [
+        { title: "Regional Lab Services", meta: "2026 Lab services agreement · $48,000", flag: "18 days" },
+        { title: "Clinic IT Support", meta: "IT support agreement · Ends Jun 15", flag: null },
+        { title: "Medical Waste Co.", meta: "Waste disposal agreement · Ends Aug 1", flag: null },
+      ],
+    },
+  } as const;
+
+  const snippet = rows[kind];
+
+  return (
+    <div className="snippet-mock" aria-hidden>
+      <div className="snippet-mock-bar">{snippet.bar}</div>
+      {snippet.items.map((item) => (
+        <div className="snippet-mock-row" key={item.title}>
+          <div>
+            <strong>{item.title}</strong>
+            <p className="snippet-mock-meta">{item.meta}</p>
+          </div>
+          {item.flag ? <span className="snippet-flag">{item.flag}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OutcomeIcon({ name }: { name: string }) {
+  const paths: Record<string, ReactNode> = {
+    calendar: (
+      <path
+        d="M8 4V2M16 4V2M4 9h16M6 6h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+      />
+    ),
+    spend: (
+      <path
+        d="M5 18V8M10 18V5M15 18v-7M20 18V10"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+      />
+    ),
+    doc: (
+      <path
+        d="M8 4h6l4 4v12H8V4zm6 0v4h4M10 14h8M10 18h6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+      />
+    ),
+    search: (
+      <>
+        <circle cx="10" cy="10" r="6" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <path d="M14.5 14.5L19 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </>
+    ),
+    users: (
+      <>
+        <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <path
+          d="M3 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 010 5M19 19c0-2-1.5-3.5-3.5-3.5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </>
+    ),
+  };
+
+  return (
+    <span className="marketing-outcome-icon" aria-hidden>
+      <svg viewBox="0 0 24 24" width="16" height="16">
+        {paths[name]}
+      </svg>
+    </span>
+  );
+}
+
 export function HomePage() {
   const [founding, setFounding] = useState<FoundingProgramStatus | null>(null);
 
@@ -213,7 +462,7 @@ export function HomePage() {
     <div className="marketing">
       <header className="marketing-nav">
         <div className="marketing-nav-inner">
-          <BrandLogo variant="nav" linkTo="/" />
+          <MarketingWordmark linkTo="/" />
           <nav className="marketing-nav-links">
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
@@ -230,9 +479,7 @@ export function HomePage() {
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
           <p className="marketing-pill">Vendor operations for private medical clinics</p>
-          <h1>
-            One calm place for every vendor your clinic depends on.
-          </h1>
+          <h1>One calm place for every vendor your clinic depends on.</h1>
           <p className="marketing-lead">
             Track vendors, contracts, compliance documents, and spend — without replacing your EHR or your
             accountant. Built for office managers at independent clinics with 3–25 staff.
@@ -244,16 +491,29 @@ export function HomePage() {
             <Link className="marketing-button secondary" to="/login">
               Sign in
             </Link>
-            <a className="marketing-button secondary light" href="#pricing">
+            <a className="marketing-button secondary" href="#pricing">
               See pricing
             </a>
           </div>
-          <p className="muted small marketing-hero-pricing-hint">
-            After you sign in, use the top menu: <strong>Billing & plan</strong> and <strong>My account</strong>.
-          </p>
+          {/* TODO: add X/LinkedIn href when a build-in-public profile is live. No public social URL in the repo. */}
+          <article className="founder-note">
+            <span className="founder-note-avatar" aria-hidden>
+              AO
+            </span>
+            <div className="founder-note-copy">
+              <p className="founder-note-title">Built by a founder, not a feature team</p>
+              <p className="founder-note-body">
+                I&apos;m building SupplierSync in the open. No investors deciding what clinics need — just
+                direct feedback from office managers shaping every screen.
+              </p>
+            </div>
+          </article>
           <ul className="marketing-trust">
             {trustItems.map((item) => (
-              <li key={item}>{item}</li>
+              <li key={item.label}>
+                <HeroTrustIcon name={item.icon} />
+                {item.label}
+              </li>
             ))}
           </ul>
         </div>
@@ -266,6 +526,14 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="marketing-section marketing-pain" id="pain">
+        <h2>Eight hours a month spent chasing dates and PDFs</h2>
+        <p>
+          Office managers at 3–25 staff clinics can lose a workday each month hunting renewal dates, last
+          year’s contract, or a BAA in email — time that stays invisible until an auto-renew hits.
+        </p>
+      </section>
+
       <section className="marketing-band">
         <div className="marketing-band-inner">
           <blockquote>
@@ -274,6 +542,47 @@ export function HomePage() {
           </blockquote>
           <p className="muted small">— The problem every private clinic office manager describes</p>
         </div>
+      </section>
+
+      {featureModules.map((module) => (
+        <section
+          className={`marketing-section marketing-module${module.flip ? " marketing-module--flip" : ""}`}
+          id={module.id}
+          key={module.id}
+        >
+          <div className="marketing-module-copy">
+            <p className="marketing-pill">{module.eyebrow}</p>
+            <h2>{module.title}</h2>
+            <p>{module.body}</p>
+            <a className="marketing-text-link" href={module.href}>
+              {module.linkLabel}
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </a>
+          </div>
+          <div className="marketing-module-visual">
+            <ModuleSnippet kind={module.snippet} />
+          </div>
+        </section>
+      ))}
+
+      <section className="marketing-section" id="outcomes">
+        <ul className="marketing-outcomes">
+          {outcomes.map((item) => (
+            <li className="marketing-outcome" key={item.label}>
+              <OutcomeIcon name={item.icon} />
+              {item.label}
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="marketing-section">
@@ -357,6 +666,21 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="marketing-section" id="faq">
+        <div className="marketing-faq">
+          <div className="marketing-faq-header">
+            <p className="marketing-pill">Questions</p>
+            <h2>Questions office managers usually ask</h2>
+          </div>
+          {faqs.map((item) => (
+            <details key={item.q}>
+              <summary>{item.q}</summary>
+              <p>{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       <section className="marketing-section" id="pricing">
         <div className="marketing-section-header center">
           <p className="eyebrow">Pricing</p>
@@ -431,7 +755,7 @@ export function HomePage() {
       </section>
 
       <footer className="marketing-footer">
-        <BrandLogo variant="footer" linkTo={null} />
+        <MarketingWordmark linkTo={null} />
         <p className="muted small">Secure vendor operations for private medical clinics</p>
         <LegalFooter className="marketing-legal-footer" />
       </footer>
