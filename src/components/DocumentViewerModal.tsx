@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { openFileUrl, resolveStorageUrl } from "../api/vendors";
+import { resolveStoragePreview } from "../api/filePreview";
+import { openFileUrl } from "../api/vendors";
 import { useFocusTrap } from "../lib/a11y";
 import {
+  downloadBlob,
   formatFileSize,
   getFilePreviewKind,
   hasDownloadableFile,
-  isDirectPreviewUrl,
 } from "../lib/utils";
 
 type DocumentViewerModalProps = {
@@ -24,6 +25,7 @@ export function DocumentViewerModal({
   onClose,
 }: DocumentViewerModalProps) {
   const [url, setUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -41,7 +43,9 @@ export function DocumentViewerModal({
 
   useEffect(() => {
     let cancelled = false;
+    let createdBlobUrl: string | null = null;
     setUrl(null);
+    setPreviewBlob(null);
     setError("");
     setLoading(true);
 
@@ -51,15 +55,15 @@ export function DocumentViewerModal({
       return;
     }
 
-    if (isDirectPreviewUrl(fileUrl)) {
-      setUrl(fileUrl);
-      setLoading(false);
-      return;
-    }
-
-    void resolveStorageUrl(fileUrl)
-      .then((resolved) => {
-        if (!cancelled) setUrl(resolved);
+    void resolveStoragePreview(fileUrl, previewKind)
+      .then((preview) => {
+        if (cancelled) {
+          if (preview.revokeOnCleanup) URL.revokeObjectURL(preview.url);
+          return;
+        }
+        if (preview.revokeOnCleanup) createdBlobUrl = preview.url;
+        setPreviewBlob(preview.blob);
+        setUrl(preview.url);
       })
       .catch((resolveError) => {
         if (!cancelled) {
@@ -72,14 +76,38 @@ export function DocumentViewerModal({
 
     return () => {
       cancelled = true;
+      if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
     };
-  }, [fileUrl]);
+  }, [fileUrl, previewKind]);
+
+  function handleOpen() {
+    void openFileUrl(fileUrl).catch((openError) => {
+      setError(openError instanceof Error ? openError.message : "Could not open file.");
+    });
+  }
+
+  function handleDownload() {
+    if (previewBlob) {
+      downloadBlob(previewBlob, fileName);
+      return;
+    }
+    if (!url) return;
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.rel = "noopener noreferrer";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  const actionsReady = Boolean(url || previewBlob);
 
   return (
     <div className="doc-viewer-backdrop" onClick={onClose}>
       <div
         ref={dialogRef}
-        className={`doc-viewer card${previewKind !== "other" ? " doc-viewer--preview" : ""}`}
+        className={`doc-viewer card${previewKind === "image" ? " doc-viewer--preview" : ""}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -90,25 +118,49 @@ export function DocumentViewerModal({
             <h2 id="doc-viewer-title">{fileName}</h2>
             {fileSize != null && <p className="muted small">{formatFileSize(fileSize)}</p>}
           </div>
-          <button type="button" className="ghost" onClick={onClose}>
-            Close
-          </button>
+          <div className="doc-viewer-head-actions">
+            {actionsReady && (
+              <>
+                <button type="button" onClick={handleOpen}>
+                  Open in new tab
+                </button>
+                <button type="button" className="secondary" onClick={handleDownload}>
+                  Download
+                </button>
+              </>
+            )}
+            <button type="button" className="ghost" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </header>
 
         <div className="doc-viewer-body">
-          {loading && <p className="muted" role="status" aria-live="polite">Loading document…</p>}
+          {loading && (
+            <p className="muted" role="status" aria-live="polite">
+              Loading document…
+            </p>
+          )}
           {error && (
             <p className="form-error" role="alert">
               {error}
             </p>
           )}
           {!loading && !error && url && previewKind === "pdf" && (
-            <iframe
-              title={fileName}
-              src={url}
-              className="doc-viewer-frame"
-              sandbox="allow-same-origin allow-downloads"
-            />
+            <div className="doc-viewer-pdf-panel">
+              <p>
+                PDFs open in a new tab so your browser can display them. Use Open in new tab or Download
+                below.
+              </p>
+              <div className="doc-viewer-actions">
+                <button type="button" onClick={handleOpen}>
+                  Open in new tab
+                </button>
+                <button type="button" className="secondary" onClick={handleDownload}>
+                  Download
+                </button>
+              </div>
+            </div>
           )}
           {!loading && !error && url && previewKind === "image" && (
             <img src={url} alt={fileName} className="doc-viewer-image" />
@@ -117,12 +169,12 @@ export function DocumentViewerModal({
             <div className="doc-viewer-fallback">
               <p className="muted">Preview isn&apos;t available for this file type. Open or download it instead.</p>
               <div className="doc-viewer-actions">
-                <button type="button" className="secondary" onClick={() => void openFileUrl(fileUrl)}>
+                <button type="button" onClick={handleOpen}>
                   Open in new tab
                 </button>
-                <a href={url} download={fileName} className="secondary doc-viewer-download">
+                <button type="button" className="secondary" onClick={handleDownload}>
                   Download
-                </a>
+                </button>
               </div>
             </div>
           )}
