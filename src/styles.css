@@ -4909,6 +4909,15 @@ a.file-attachment-link:hover {
   max-width: 42rem;
 }
 
+.doc-viewer-body > .muted.small {
+  margin: 0 0 8px;
+}
+
+object.doc-viewer-frame {
+  display: flex;
+  flex-direction: column;
+}
+
 .doc-viewer-head h3 {
   margin: 0;
   word-break: break-word;
