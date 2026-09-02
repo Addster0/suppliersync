@@ -19,7 +19,7 @@ const BLOB_URL_REVOKE_MS = 60 * 60 * 1000;
 let heldPreviewTab: { key: string; tab: Window } | null = null;
 
 function asTypedBlob(blob: Blob, previewKind?: FilePreviewKind): Blob {
-  if (previewKind === "pdf" && blob.type !== "application/pdf") {
+  if (previewKind === "pdf") {
     return new Blob([blob], { type: "application/pdf" });
   }
   return blob;
@@ -123,7 +123,12 @@ export function navigateHeldPreviewTab(key: string, blob: Blob): boolean {
     return false;
   }
   const url = URL.createObjectURL(blob);
-  heldPreviewTab.tab.location.replace(url);
+  try {
+    heldPreviewTab.tab.location.href = url;
+  } catch {
+    URL.revokeObjectURL(url);
+    return false;
+  }
   window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_REVOKE_MS);
   return true;
 }

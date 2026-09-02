@@ -88,7 +88,10 @@ export function DocumentViewerModal({
 
     return () => {
       cancelled = true;
-      if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
+      if (createdBlobUrl) {
+        const toRevoke = createdBlobUrl;
+        window.setTimeout(() => URL.revokeObjectURL(toRevoke), 60 * 60 * 1000);
+      }
     };
   }, [fileUrl, previewKind, previewKey]);
 
@@ -172,7 +175,7 @@ export function DocumentViewerModal({
                   Pop-up blocked, so the PDF is shown here. Use Open in new tab if you allow pop-ups.
                 </p>
               )}
-              <embed src={url} type="application/pdf" className="doc-viewer-frame" />
+              <iframe title={fileName} src={url} className="doc-viewer-frame" />
             </>
           )}
           {!loading && !error && url && previewKind === "image" && (
