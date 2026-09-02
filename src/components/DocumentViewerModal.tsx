@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { resolveStoragePreview } from "../api/filePreview";
-import { openFileUrl } from "../api/vendors";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  closeHeldPreviewTab,
+  holdPreviewTab,
+  navigateHeldPreviewTab,
+  openBlobInNewTab,
+  openStorageFileInNewTab,
+  previewTabKey,
+  resolveStoragePreview,
+} from "../api/filePreview";
 import { useFocusTrap } from "../lib/a11y";
 import {
   downloadBlob,
@@ -28,8 +35,10 @@ export function DocumentViewerModal({
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [popupBlocked, setPopupBlocked] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previewKind = getFilePreviewKind(fileName, mimeType);
+  const previewKey = previewTabKey(fileUrl, fileName);
 
   useFocusTrap(dialogRef, true);
 
@@ -40,6 +49,12 @@ export function DocumentViewerModal({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  useLayoutEffect(() => {
+    if (previewKind !== "pdf") return;
+    const tab = holdPreviewTab(previewKey, fileName);
+    setPopupBlocked(!tab);
+  }, [fileName, previewKey, previewKind]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,8 +79,12 @@ export function DocumentViewerModal({
         if (preview.revokeOnCleanup) createdBlobUrl = preview.url;
         setPreviewBlob(preview.blob);
         setUrl(preview.url);
+        if (previewKind === "pdf") {
+          setPopupBlocked(!navigateHeldPreviewTab(previewKey, preview.blob));
+        }
       })
       .catch((resolveError) => {
+        closeHeldPreviewTab(previewKey);
         if (!cancelled) {
           setError(resolveError instanceof Error ? resolveError.message : "Could not load file.");
         }
@@ -78,12 +97,18 @@ export function DocumentViewerModal({
       cancelled = true;
       if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
     };
-  }, [fileUrl, previewKind]);
+  }, [fileUrl, previewKind, previewKey]);
 
   function handleOpen() {
-    void openFileUrl(fileUrl).catch((openError) => {
-      setError(openError instanceof Error ? openError.message : "Could not open file.");
-    });
+    if (previewBlob) {
+      setPopupBlocked(!openBlobInNewTab(previewBlob));
+      return;
+    }
+    void openStorageFileInNewTab(fileUrl, previewKind)
+      .then((opened) => setPopupBlocked(!opened))
+      .catch((openError) => {
+        setError(openError instanceof Error ? openError.message : "Could not open file.");
+      });
   }
 
   function handleDownload() {
@@ -102,12 +127,13 @@ export function DocumentViewerModal({
   }
 
   const actionsReady = Boolean(url || previewBlob);
+  const showPreviewFrame = previewKind === "pdf" || previewKind === "image";
 
   return (
     <div className="doc-viewer-backdrop" onClick={onClose}>
       <div
         ref={dialogRef}
-        className={`doc-viewer card${previewKind === "image" ? " doc-viewer--preview" : ""}`}
+        className={`doc-viewer card${showPreviewFrame ? " doc-viewer--preview" : ""}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -147,20 +173,16 @@ export function DocumentViewerModal({
             </p>
           )}
           {!loading && !error && url && previewKind === "pdf" && (
-            <div className="doc-viewer-pdf-panel">
-              <p>
-                PDFs open in a new tab so your browser can display them. Use Open in new tab or Download
-                below.
-              </p>
-              <div className="doc-viewer-actions">
-                <button type="button" onClick={handleOpen}>
-                  Open in new tab
-                </button>
-                <button type="button" className="secondary" onClick={handleDownload}>
-                  Download
-                </button>
-              </div>
-            </div>
+            <>
+              {popupBlocked && (
+                <p className="muted small">
+                  Pop-up blocked, so the PDF is shown here. Use Open in new tab if you allow pop-ups.
+                </p>
+              )}
+              <object data={url} type="application/pdf" className="doc-viewer-frame" aria-label={fileName}>
+                <iframe title={fileName} src={url} className="doc-viewer-frame" />
+              </object>
+            </>
           )}
           {!loading && !error && url && previewKind === "image" && (
             <img src={url} alt={fileName} className="doc-viewer-image" />

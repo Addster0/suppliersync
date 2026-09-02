@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { openFileUrl, resolveStorageUrl } from "../api/vendors";
+import { holdFilePreviewTab, openStorageFileInNewTab, resolveStoragePreview } from "../api/filePreview";
 import {
   formatFileSize,
+  getFilePreviewKind,
   hasDownloadableFile,
-  isDirectPreviewUrl,
-  normalizeStorageFileUrl,
 } from "../lib/utils";
 
 type FileAttachmentLinkProps = {
@@ -24,12 +23,21 @@ export function FileAttachmentLink({
   onPreview,
 }: FileAttachmentLinkProps) {
   const [href, setHref] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!onPreview);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const previewKind = getFilePreviewKind(fileName);
 
   useEffect(() => {
+    if (onPreview) {
+      setHref(null);
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    let createdBlobUrl: string | null = null;
     setHref(null);
     setError("");
     setLoading(true);
@@ -39,15 +47,14 @@ export function FileAttachmentLink({
       return;
     }
 
-    if (isDirectPreviewUrl(fileUrl)) {
-      setHref(normalizeStorageFileUrl(fileUrl));
-      setLoading(false);
-      return;
-    }
-
-    void resolveStorageUrl(fileUrl)
-      .then((url) => {
-        if (!cancelled) setHref(url);
+    void resolveStoragePreview(fileUrl, previewKind)
+      .then((preview) => {
+        if (cancelled) {
+          if (preview.revokeOnCleanup) URL.revokeObjectURL(preview.url);
+          return;
+        }
+        if (preview.revokeOnCleanup) createdBlobUrl = preview.url;
+        setHref(preview.url);
       })
       .catch((resolveError) => {
         if (!cancelled) {
@@ -60,8 +67,12 @@ export function FileAttachmentLink({
 
     return () => {
       cancelled = true;
+      if (createdBlobUrl) {
+        const toRevoke = createdBlobUrl;
+        window.setTimeout(() => URL.revokeObjectURL(toRevoke), 60 * 60 * 1000);
+      }
     };
-  }, [fileUrl]);
+  }, [fileUrl, onPreview, previewKind]);
 
   if (!hasDownloadableFile(fileUrl)) {
     return variant === "title" ? <strong>📄 {fileName}</strong> : null;
@@ -78,7 +89,7 @@ export function FileAttachmentLink({
     return <span className="file-attachment-loading muted small">Preparing file link…</span>;
   }
 
-  if (error || !href) {
+  if (error || (!href && !onPreview)) {
     return (
       <div className="file-attachment-wrap">
         <span className="muted small">📄 {fileName}</span>
@@ -89,9 +100,16 @@ export function FileAttachmentLink({
           onClick={() => {
             setRetrying(true);
             setError("");
-            void openFileUrl(fileUrl).catch((openError) => {
-              setError(openError instanceof Error ? openError.message : "Could not open file.");
-            }).finally(() => setRetrying(false));
+            void openStorageFileInNewTab(fileUrl, previewKind)
+              .then((opened) => {
+                if (!opened) {
+                  setError("Pop-up blocked. Allow pop-ups for this site and try again.");
+                }
+              })
+              .catch((openError) => {
+                setError(openError instanceof Error ? openError.message : "Could not open file.");
+              })
+              .finally(() => setRetrying(false));
           }}
         >
           {retrying ? "Opening…" : "Open file"}
@@ -104,7 +122,14 @@ export function FileAttachmentLink({
   if (onPreview) {
     return (
       <div className="file-attachment-wrap">
-        <button type="button" className={className} onClick={onPreview}>
+        <button
+          type="button"
+          className={className}
+          onClick={() => {
+            if (previewKind === "pdf") holdFilePreviewTab(fileUrl, fileName);
+            onPreview();
+          }}
+        >
           {label}
         </button>
       </div>
@@ -113,13 +138,7 @@ export function FileAttachmentLink({
 
   return (
     <div className="file-attachment-wrap">
-      <a
-        href={href}
-        className={className}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={href.startsWith("blob:") ? fileName : undefined}
-      >
+      <a href={href!} className={className} target="_blank" rel="noopener noreferrer">
         {label}
       </a>
     </div>

@@ -35,6 +35,7 @@ import {
   uploadOrgFile,
   setRenewalHandled,
 } from "./api/vendors";
+import { holdFilePreviewTab } from "./api/filePreview";
 import { BrandLogo } from "./components/BrandLogo";
 import { ContractRenewalLossBadge } from "./components/ContractRenewalLossBadge";
 import { DocumentViewerModal } from "./components/DocumentViewerModal";
@@ -92,6 +93,7 @@ import {
   formatFileSize,
   getStatusClass,
   hasDownloadableFile,
+  getFilePreviewKind,
   localFileToAttachment,
   money,
   prettyDate,
@@ -1694,6 +1696,9 @@ function ContractsSection({
   }
 
   function previewAttachment(attachment: FileAttachment) {
+    if (getFilePreviewKind(attachment.fileName, attachment.mimeType) === "pdf") {
+      holdFilePreviewTab(attachment.fileUrl, attachment.fileName);
+    }
     setViewingFile((current) => {
       revokeAttachmentUrl(current);
       return attachment;
@@ -2309,6 +2314,9 @@ function DocumentsSection({
     if (!document.id.startsWith("pending-")) {
       markViewed(organizationId, "documents", document.id);
       setViewedTick((tick) => tick + 1);
+    }
+    if (getFilePreviewKind(document.fileName) === "pdf") {
+      holdFilePreviewTab(document.fileUrl, document.fileName);
     }
     setViewingDocument(document);
   }

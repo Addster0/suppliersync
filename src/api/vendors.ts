@@ -1,5 +1,6 @@
 import { requireSupabase } from "../lib/supabase";
 import { formatStorageError, ORG_FILES_BUCKET } from "../lib/storage";
+import { openStorageFileInNewTab } from "./filePreview";
 import type {
   Contact,
   Contract,
@@ -983,20 +984,10 @@ export async function resolveStorageUrl(fileUrl: string): Promise<string> {
 }
 
 export async function openFileUrl(fileUrl: string): Promise<void> {
-  const url = await resolveStorageUrl(fileUrl);
-  const popup = window.open(url, "_blank");
-  if (popup) {
-    popup.opener = null;
-    return;
+  const opened = await openStorageFileInNewTab(fileUrl);
+  if (!opened) {
+    throw new Error("Pop-up blocked. Allow pop-ups for this site to open the file.");
   }
-
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
 }
 
 export async function searchOrganization(
