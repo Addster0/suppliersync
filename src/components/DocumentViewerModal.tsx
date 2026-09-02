@@ -1,7 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   closeHeldPreviewTab,
-  holdPreviewTab,
   navigateHeldPreviewTab,
   openBlobInNewTab,
   openStorageFileInNewTab,
@@ -49,12 +48,6 @@ export function DocumentViewerModal({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
-
-  useLayoutEffect(() => {
-    if (previewKind !== "pdf") return;
-    const tab = holdPreviewTab(previewKey, fileName);
-    setPopupBlocked(!tab);
-  }, [fileName, previewKey, previewKind]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,9 +172,7 @@ export function DocumentViewerModal({
                   Pop-up blocked, so the PDF is shown here. Use Open in new tab if you allow pop-ups.
                 </p>
               )}
-              <object data={url} type="application/pdf" className="doc-viewer-frame" aria-label={fileName}>
-                <iframe title={fileName} src={url} className="doc-viewer-frame" />
-              </object>
+              <embed src={url} type="application/pdf" className="doc-viewer-frame" />
             </>
           )}
           {!loading && !error && url && previewKind === "image" && (

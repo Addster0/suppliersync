@@ -4913,9 +4913,9 @@ a.file-attachment-link:hover {
   margin: 0 0 8px;
 }
 
+embed.doc-viewer-frame,
 object.doc-viewer-frame {
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 .doc-viewer-head h3 {

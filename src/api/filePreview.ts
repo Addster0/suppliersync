@@ -18,10 +18,9 @@ const BLOB_URL_REVOKE_MS = 60 * 60 * 1000;
 
 let heldPreviewTab: { key: string; tab: Window } | null = null;
 
-async function asTypedBlob(blob: Blob, previewKind?: FilePreviewKind): Promise<Blob> {
-  if (previewKind === "pdf") {
-    const buffer = await blob.arrayBuffer();
-    return new Blob([buffer], { type: "application/pdf" });
+function asTypedBlob(blob: Blob, previewKind?: FilePreviewKind): Blob {
+  if (previewKind === "pdf" && blob.type !== "application/pdf") {
+    return new Blob([blob], { type: "application/pdf" });
   }
   return blob;
 }
@@ -51,14 +50,14 @@ export async function resolveStoragePreview(
   const normalized = normalizeStorageFileUrl(fileUrl);
 
   if (isDirectPreviewUrl(normalized)) {
-    const blob = await asTypedBlob(await fetch(normalized).then((response) => response.blob()), previewKind);
+    const blob = asTypedBlob(await fetch(normalized).then((response) => response.blob()), previewKind);
     if (previewKind === "pdf") {
       return { url: URL.createObjectURL(blob), blob, revokeOnCleanup: true };
     }
     return { url: normalized, blob, revokeOnCleanup: false };
   }
 
-  const blob = await asTypedBlob(await downloadOrgFileBlob(normalized), previewKind);
+  const blob = asTypedBlob(await downloadOrgFileBlob(normalized), previewKind);
   return { url: URL.createObjectURL(blob), blob, revokeOnCleanup: true };
 }
 
